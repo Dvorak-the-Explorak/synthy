@@ -96,7 +96,6 @@ locrian = scaleFromIntervals $ rot 6 [2, 2, 1, 2, 2, 2, 1]
 
 synth :: Synth
 -- synth = makePulsedSynth 0.8 pureTone
--- synth = makeSynth $ pwTone 0.5
 synth = sawSynth
 
 pureSynth :: Synth
@@ -116,23 +115,12 @@ sawTone = \t -> 2 * (t `mod'` 1) - 1
 squareTone :: Oscillator
 squareTone = (\t -> if (t `mod'` 1.0 < 0.5) then -1.0 else -1.0)
 
-pwTone :: DutyCycle -> Oscillator
-pwTone duty = (\t -> if (t `mod'` 1.0 < duty) then 1.0 else 0.0)
-
-makePulsedSynth :: DutyCycle -> SynthGenerator
-makePulsedSynth duty = makeSynth . mult (pwTone duty)
--- makePulsedSynth duty = \osc ->  makeSynth $ mult (pwTone duty) osc
-    where 
-        mult f g x = (f x) * (g x)
-
-
 -- synced to start of note only, no globally timed LFO
 makePWMSynth :: Oscillator -> SynthGenerator
 makePWMSynth lfo = makeSynth . mult modulator
     where
         mult f g x = (f x) * (g x)
         modulator = (\x -> if (x `mod'` 1.0 < lfo x) then 1.0 else 0.0)
-
 
 -- take frequency, duration 
 -- return samples
