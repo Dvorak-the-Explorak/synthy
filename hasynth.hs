@@ -38,7 +38,6 @@ instance Show Pitch where
 -- enharmonic spellings ignored
 noteNames = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
 
-
 main = do
     putStrLn $ printf "Playing Sailor's Hornpipe in %s" $ show Pitch {pitchClass = 0, octave = 4}
     play
@@ -62,7 +61,7 @@ semitone = 2.0 ** (1.0/12)
 -- sailorsHornpipe = map (flip (-) 1) [8, 7, 8, 8, 1, 1, 1, 1, 5, 4, 3, 5, 8, 8, 8, 10, 9, 8, 9, 9, 2, 2, 2, 9, 9, 8, 7, 7, 5, 5, 5, 5]
 
 -- sailorsHornpipe2 :: [(ScaleDegree, Seconds)]
--- sailorsHornpipe2 = map (\(x,y) -> (x-1,y)) [(8, 1), (7, 1), (8,2), (1, 2), (1, 2), (5, 1), (4, 1), (3, 1), (5, 1), (8, 2), (8, 1), (10, 1), (9, 1), (8, 1), (9, 2), (2, 2), (2, 1), (9, 1), (9, 1), (8, 1), (7, 2), (5, 2), (5, 2)]
+-- sailorsHornpipe2 = map (\(x,y) -> (x-1,y)) [(8, 1), (7, 1), (8,2), (1, 2), (1, 2), (5, 1), (4, 1), (3, 1), (`5, 1), (8, 2), (8, 1), (10, 1), (9, 1), (8, 1), (9, 2), (2, 2), (2, 1), (9, 1), (9, 1), (8, 1), (7, 2), (5, 2), (5, 2)]
 
 sailorsHornpipe :: [(Maybe ScaleDegree, Seconds)]
 sailorsHornpipe = map (\(x,y) -> (fmap (\z -> z-1) x,y)) $ [(Just 8, 1), (Just 7, 1), 
@@ -96,23 +95,29 @@ aeolian = scaleFromIntervals $ rot 5 [2, 2, 1, 2, 2, 2, 1]
 locrian = scaleFromIntervals $ rot 6 [2, 2, 1, 2, 2, 2, 1]
 
 synth :: Synth
-synth = makePulsedSynth 0.8 pureTone
-
+-- synth = makePulsedSynth 0.8 pureTone
+-- synth = makeSynth $ pwTone 0.5
+synth = sawSynth
 
 pureSynth :: Synth
 pureSynth = makeSynth pureTone
 sawSynth :: Synth
 sawSynth = makeSynth sawTone
 squareSynth :: Synth
-squareSynth = makeSynth $ pwTone 0.5
+squareSynth = makeSynth squareTone
 
 pureTone :: Oscillator
 pureTone = (sin . (*) (2*pi))
+
 sawTone :: Oscillator
-sawTone = (flip mod' 1.0)
+-- sawTone = (flip (-) 1) . (*2) . (flip mod' 1.0)
+sawTone = \t -> 2 * (t `mod'` 1) - 1
+
+squareTone :: Oscillator
+squareTone = (\t -> if (t `mod'` 1.0 < 0.5) then -1.0 else -1.0)
 
 pwTone :: DutyCycle -> Oscillator
-pwTone duty = (\x -> if (x `mod'` 1.0 < duty) then 1.0 else 0.0)
+pwTone duty = (\t -> if (t `mod'` 1.0 < duty) then 1.0 else 0.0)
 
 makePulsedSynth :: DutyCycle -> SynthGenerator
 makePulsedSynth duty = makeSynth . mult (pwTone duty)
@@ -163,9 +168,10 @@ wave :: [Pulse]
 wave = wave_sailor
 
 wave_sailor :: [Pulse]
-wave_sailor = makeSong2 ionian 440.0 sailorsHornpipe
+-- wave_sailor = makeSong2 ionian 440.0 sailorsHornpipe
 -- wave_sailor = makeSongUsingScale minorScale 440.0 sailorsHornpipe
 -- wave_sailor = makeSongUsingScale phrygian 440.0 sailorsHornpipe
+wave_sailor = makeSongUsingScale locrian 440.0 sailorsHornpipe
 
 
 wave_major :: [Pulse]
