@@ -38,11 +38,18 @@ instance Show Pitch where
 -- enharmonic spellings ignored
 noteNames = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
 
-main = do
-    putStrLn $ printf "Playing Sailor's Hornpipe in %s" $ show Pitch {pitchClass = 0, octave = 4}
-    play
-    putStrLn $ "made " ++ filename
+-- pitchFromString str | (str !! 1) == '#' = Pitch (find (== take 2 str) noteNames) (read $ drop 2 str)
+--                     | otherwise = Pitch (find (== take 1 str) noteNames) (read $ drop 1 str)
 
+freqFromPitch :: Pitch -> Hz
+freqFromPitch (Pitch 9 4) = 440.0
+freqFromPitch (Pitch pc oct) = 2.0**((fromIntegral oct)-4 + ((fromIntegral pc)-9)/12.0) * (freqFromPitch $ Pitch 9 4)
+                             
+
+-- ================================================================
+-- ================================================================
+-- ================================================================
+-- ================================================================
 
 filename :: FilePath
 filename = "output.bin"
@@ -53,15 +60,12 @@ sampleRate = 48000.0
 tempo :: Beats
 tempo = 100.0
 
+tonalCenter :: Pitch
+tonalCenter = Pitch 0 4
+
 semitone :: Hz
 semitone = 2.0 ** (1.0/12)
 
-
--- sailorsHornpipe :: [ScaleDegree]
--- sailorsHornpipe = map (flip (-) 1) [8, 7, 8, 8, 1, 1, 1, 1, 5, 4, 3, 5, 8, 8, 8, 10, 9, 8, 9, 9, 2, 2, 2, 9, 9, 8, 7, 7, 5, 5, 5, 5]
-
--- sailorsHornpipe2 :: [(ScaleDegree, Seconds)]
--- sailorsHornpipe2 = map (\(x,y) -> (x-1,y)) [(8, 1), (7, 1), (8,2), (1, 2), (1, 2), (5, 1), (4, 1), (3, 1), (`5, 1), (8, 2), (8, 1), (10, 1), (9, 1), (8, 1), (9, 2), (2, 2), (2, 1), (9, 1), (9, 1), (8, 1), (7, 2), (5, 2), (5, 2)]
 
 sailorsHornpipe :: [(Maybe ScaleDegree, Seconds)]
 sailorsHornpipe = map (\(x,y) -> (fmap (\z -> z-1) x,y)) $ [(Just 8, 1), (Just 7, 1), 
@@ -76,6 +80,8 @@ sailorsHornpipe = map (\(x,y) -> (fmap (\z -> z-1) x,y)) $ [(Just 8, 1), (Just 7
     where 
         -- just make a list of notes with given pitches and duration of 1
         semis = map (\n -> (Just n, 1))
+
+-- =======================================================================
 
 -- more like [Interval] -> Scale
 scaleFromIntervals :: [ScaleDegree] -> Scale
@@ -94,9 +100,12 @@ mixolydian = scaleFromIntervals $ rot 4 [2, 2, 1, 2, 2, 2, 1]
 aeolian = scaleFromIntervals $ rot 5 [2, 2, 1, 2, 2, 2, 1]
 locrian = scaleFromIntervals $ rot 6 [2, 2, 1, 2, 2, 2, 1]
 
+-- ==================================================================================
+
 synth :: Synth
 -- synth = makePulsedSynth 0.8 pureTone
 synth = sawSynth
+-- synth = pureSynth
 
 pureSynth :: Synth
 pureSynth = makeSynth pureTone
@@ -129,50 +138,9 @@ makeSynth baseWave  = \toneFreq duration -> map (\t ->  volume * baseWave( t * t
         where 
             volume = 0.5
 
-makeSong :: Hz -> [(Maybe ScaleDegree, Seconds)] -> [Pulse]
-makeSong = makeSongUsingScale majorScale
 
-makeSongUsingScale :: Scale ->  Hz -> [(Maybe ScaleDegree, Seconds)] -> [Pulse]
-makeSongUsingScale scale noteFreq notes = concat $ map (uncurry makeNote) notes
-    where
-        makeNote (Just n) d = articulation $ synth (noteFreq * (scale n)) (sq_duration * d)
-        makeNote Nothing d = replicate (floor $ sq_duration * d * sampleRate) 0.0
-        articulation = ar_envelope 0.02
-        sq_duration = 60.0/tempo/4.0
-
-
-makeSong2 :: Scale ->  Hz -> [(Maybe ScaleDegree, Seconds)] -> [Pulse]
-makeSong2 scale noteFreq notes = concat $ map (uncurry makeNote) notes
-    where
-        makeNote (Just n) d = env 1.0 (sq*d) $ synth (noteFreq * (scale n)) (sq * d)
-        makeNote Nothing d = replicate (floor $ sq * d * sampleRate) 0.0
-        env :: Envelope
-        env = adsr (sq/8) (sq/2) 0.6 (sq/10)
-        sq = 60.0/tempo/4.0
-
-
-
-wave :: [Pulse]
-wave = wave_sailor
-
-wave_sailor :: [Pulse]
--- wave_sailor = makeSong2 ionian 440.0 sailorsHornpipe
--- wave_sailor = makeSongUsingScale minorScale 440.0 sailorsHornpipe
--- wave_sailor = makeSongUsingScale phrygian 440.0 sailorsHornpipe
-wave_sailor = makeSongUsingScale locrian 440.0 sailorsHornpipe
-
-
-wave_major :: [Pulse]
-wave_major = concat [synth (hz * (majorScale i)) duration | i <- [0..14]]
-    where
-        hz = 440.0/2
-        duration = 0.25
-
-wave_chromatic :: [Pulse]
-wave_chromatic = concat [synth (hz * semitone ** i) duration | i <- [1..12]]
-    where
-        hz = 440.0
-        duration = 0.5
+-- =====================================================================
+-- =====================================================================s
 
 
 
@@ -221,9 +189,32 @@ adsr attackTime decayTime susLevel releaseTime = \vel duration input ->
         releaseStep = 1.0/(releaseTime * sampleRate)
     in output
 
+
+-- =====================================================
+
+makeSong :: Scale ->  Pitch -> [(Maybe ScaleDegree, Seconds)] -> [Pulse]
+makeSong scale pitch notes = concat $ map (uncurry makeNote) notes
+    where
+        makeNote (Just n) d = env 1.0 (sq*d) $ synth ((freqFromPitch pitch) * (scale n)) (sq * d)
+        makeNote Nothing d = replicate (floor $ sq * d * sampleRate) 0.0
+        env :: Envelope
+        env = adsr (sq/8) (sq/2) 0.6 (sq/10)
+        sq = 60.0/tempo/4.0
+
+-- =====================================================
+-- =====================================================
+-- =====================================================
+
+main = do
+    putStrLn $ printf "Playing Sailor's Hornpipe in %s" $ shows tonalCenter 
+    play
+    putStrLn $ "made " ++ filename
+
 -- B.floatLE is float little endian
 song = B.toLazyByteString $ mconcat $ map B.floatLE wave
 
+wave :: [Pulse]
+wave = makeSong lydian tonalCenter sailorsHornpipe
 
 save :: IO()
 save = saveAs filename
