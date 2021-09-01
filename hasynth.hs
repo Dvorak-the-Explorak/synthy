@@ -5,6 +5,7 @@ import System.Process
 import Text.Printf
 import Data.List
 import Data.Fixed
+import Debug.Trace
 
 -- play with:
 -- ffplay -f f32le -ar 48000 output.bin
@@ -16,20 +17,22 @@ type Pulse = Float
 type ScaleDegree = Int
 type Beats = Float
 type DutyCycle = Float
+type Velocity = Float
 type Synth = Hz -> Seconds -> [Pulse]
 type Oscillator = Seconds -> Pulse
 type SynthGenerator = Oscillator -> Synth
+type Scale = ScaleDegree -> Hz
+-- Kinda don't like that the envelope acts on samples
+type Envelope = Velocity -> Seconds -> [Pulse] -> [Pulse]
 
 
-data Note = Note {
-    name :: Int,
+data Pitch = Pitch {
+    pitchClass :: Int,
     octave :: Int
 }
 
-
-
-instance Show Note where
-    show (Note n oct) | n >=0 && n < 12 = (noteNames !! n) ++ (show oct)
+instance Show Pitch where
+    show (Pitch n oct) | n >=0 && n < 12 = (noteNames !! n) ++ (show oct)
                       | otherwise = (noteNames !! (n `mod` 12)) ++ (show $ oct + n `div` 12)
 
 -- enharmonic spellings ignored
@@ -37,6 +40,7 @@ noteNames = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
 
 
 main = do
+    putStrLn $ printf "Playing Sailor's Hornpipe in %s" $ show Pitch {pitchClass = 0, octave = 4}
     play
     putStrLn $ "made " ++ filename
 
@@ -71,32 +75,28 @@ sailorsHornpipe = map (\(x,y) -> (fmap (\z -> z-1) x,y)) $ [(Just 8, 1), (Just 7
                                             -1, 1, 0, 2, 1, 3, 2, 4, 
                                             3] ++ [(Nothing, 1), (Just 1, 1), (Nothing, 1), (Just 1, 1), (Nothing, 1)]
     where 
+        -- just make a list of notes with given pitches and duration of 1
         semis = map (\n -> (Just n, 1))
 
-
-scale :: [ScaleDegree] -> ScaleDegree -> Hz
-scale gaps n | n < 0 = 1.0/(scale (reverse gaps) (-n))
+-- more like [Interval] -> Scale
+scaleFromIntervals :: [ScaleDegree] -> Scale
+scaleFromIntervals gaps n | n < 0 = 1.0/(scaleFromIntervals (reverse gaps) (-n))
              | n == 0 = 1.0
              | n < 7 = semitone ** (fromIntegral (scanl1 (+) gaps !! (n-1)))
-             | otherwise = 2 * (scale gaps $ n-7)
+             | otherwise = 2 * (scaleFromIntervals gaps $ n-7)
 
-majorScale = scale [2, 2, 1, 2, 2, 2, 1]
-minorScale = scale [2, 1, 2, 2, 2, 1, 2]
-
--- majorScale :: ScaleDegree -> Hz
--- majorScale n | n < 0 = 1.0/(majorScale (-n))
---              | n == 0 = 1.0
---              | n < 7 = semitone ** (scanl1 (+) gaps !! (n-1))
---              | otherwise = 2 * (majorScale $ n-7)
---     where
---         gaps = [2, 2, 1, 2, 2, 2]
-
+majorScale = ionian
+minorScale = dorian
+ionian = scaleFromIntervals [2, 2, 1, 2, 2, 2, 1]
+dorian = scaleFromIntervals $ rot 1 [2, 2, 1, 2, 2, 2, 1]
+phrygian = scaleFromIntervals $ rot 2 [2, 2, 1, 2, 2, 2, 1]
+lydian = scaleFromIntervals $ rot 3 [2, 2, 1, 2, 2, 2, 1]
+mixolydian = scaleFromIntervals $ rot 4 [2, 2, 1, 2, 2, 2, 1]
+aeolian = scaleFromIntervals $ rot 5 [2, 2, 1, 2, 2, 2, 1]
+locrian = scaleFromIntervals $ rot 6 [2, 2, 1, 2, 2, 2, 1]
 
 synth :: Synth
--- synth = makePulsedSynth 0.8 pureTone
-synth = makePWMSynth lfo pureTone
-    where 
-        lfo t = 0.25 * (3 + pureTone (t/400))
+synth = makePulsedSynth 0.8 pureTone
 
 
 
@@ -139,19 +139,35 @@ makeSynth baseWave  = \toneFreq duration -> map (\t ->  volume * baseWave( t * t
 
 
 makeSong :: Hz -> [(Maybe ScaleDegree, Seconds)] -> [Pulse]
-makeSong noteFreq notes = concat $ map (uncurry makeNote) notes
+makeSong = makeSongUsingScale majorScale
+
+makeSongUsingScale :: Scale ->  Hz -> [(Maybe ScaleDegree, Seconds)] -> [Pulse]
+makeSongUsingScale scale noteFreq notes = concat $ map (uncurry makeNote) notes
     where
-        makeNote (Just n) d = articulation $ synth (noteFreq * (majorScale n)) (sq_duration * d)
+        makeNote (Just n) d = articulation $ synth (noteFreq * (scale n)) (sq_duration * d)
         makeNote Nothing d = replicate (floor $ sq_duration * d * sampleRate) 0.0
         articulation = ar_envelope 0.02
         sq_duration = 60.0/tempo/4.0
+
+
+makeSong2 :: Scale ->  Hz -> [(Maybe ScaleDegree, Seconds)] -> [Pulse]
+makeSong2 scale noteFreq notes = concat $ map (uncurry makeNote) notes
+    where
+        makeNote (Just n) d = env 1.0 (sq*d) $ synth (noteFreq * (scale n)) (sq * d)
+        makeNote Nothing d = replicate (floor $ sq * d * sampleRate) 0.0
+        env :: Envelope
+        env = adsr (sq/10) (sq/4) 0.6 (sq/10)
+        sq = 60.0/tempo/4.0
+
 
 
 wave :: [Pulse]
 wave = wave_sailor
 
 wave_sailor :: [Pulse]
-wave_sailor = makeSong 440.0 sailorsHornpipe
+wave_sailor = makeSong2 ionian 440.0 sailorsHornpipe
+-- wave_sailor = makeSongUsingScale minorScale 440.0 sailorsHornpipe
+-- wave_sailor = makeSongUsingScale phrygian 440.0 sailorsHornpipe
 
 
 wave_major :: [Pulse]
@@ -166,17 +182,41 @@ wave_chromatic = concat [synth (hz * semitone ** i) duration | i <- [1..12]]
         hz = 440.0
         duration = 0.5
 
+
+
+-- ramp up/down time -> input -> output
 ar_envelope :: Seconds -> [Pulse] -> [Pulse]
-ar_envelope slope input = zipWith (*) envelope input
+ar_envelope rampTime input = zipWith (*) envelope input
     where
         rampUp = map (min 1.0) $ iterate (+stepUp) 0.0
         rampDown = reverse $ take (length input) rampUp
         envelope = zipWith (*) rampUp rampDown
 
-        stepUp = 1.0/(slope * sampleRate)
+        stepUp = 1.0/(rampTime * sampleRate)
+
+-- Linear attack, decay and release
+adsr :: Seconds -> Seconds -> Pulse -> Seconds -> Envelope
+adsr attackTime decayTime susLevel releaseTime = \vel duration input -> 
+    let 
+        -- output = trace (show attackStep ++ show attack ++ "\n" ++ show decayStep ++ show decay ++ "\n" ++ show releaseStep ++ show release) $ zipWith (*) env input
+        output = zipWith (*) env input
+
+        env = attack ++ decay ++ sustain ++ release ++ repeat 0.0
+
+        attack = map (*attackStep) [0.0 .. vel/attackStep]
+        decay = map (*decayStep) $ reverse [vel*susLevel/decayStep .. vel/decayStep]
+
+        -- #TODO what if duration is less than attack + decay
+        -- release won't start at sustain level
+        sustain = replicate (max 0 $ (floor $ duration*sampleRate) - length attack - length decay) $ susLevel*vel
+        release = map (*releaseStep) $ reverse [0.0 .. vel*susLevel/releaseStep]
+
+        attackStep = 1.0/(attackTime * sampleRate)
+        decayStep = 1.0/(decayTime * sampleRate)
+        releaseStep = 1.0/(releaseTime * sampleRate)
+    in output
 
 -- B.floatLE is float little endian
-
 song = B.toLazyByteString $ mconcat $ map B.floatLE wave
 
 
@@ -189,5 +229,12 @@ saveAs path = B.writeFile path song
 play :: IO()
 play = do
     save
-    _ <- runCommand $ printf "ffplay  -showmode 1 -f f32le -ar %f %s" sampleRate filename
+    -- runCommand :: String -> IO (processHandleOrSomething)
+    _ <- runCommand $ printf "ffplay -loglevel quiet -showmode 2 -f f32le -ar %f %s" sampleRate filename
     return ()
+
+
+rot :: Int -> [a] -> [a]
+rot _ [] = []
+rot 0 xs = xs
+rot n (x:xs) = rot (n-1) $ xs ++ [x]
