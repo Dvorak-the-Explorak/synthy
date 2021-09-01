@@ -99,7 +99,6 @@ synth :: Synth
 synth = makePulsedSynth 0.8 pureTone
 
 
-
 pureSynth :: Synth
 pureSynth = makeSynth pureTone
 sawSynth :: Synth
@@ -137,7 +136,6 @@ makeSynth baseWave  = \toneFreq duration -> map (\t ->  volume * baseWave( t * t
         where 
             volume = 0.5
 
-
 makeSong :: Hz -> [(Maybe ScaleDegree, Seconds)] -> [Pulse]
 makeSong = makeSongUsingScale majorScale
 
@@ -156,7 +154,7 @@ makeSong2 scale noteFreq notes = concat $ map (uncurry makeNote) notes
         makeNote (Just n) d = env 1.0 (sq*d) $ synth (noteFreq * (scale n)) (sq * d)
         makeNote Nothing d = replicate (floor $ sq * d * sampleRate) 0.0
         env :: Envelope
-        env = adsr (sq/10) (sq/4) 0.6 (sq/10)
+        env = adsr (sq/8) (sq/2) 0.6 (sq/10)
         sq = 60.0/tempo/4.0
 
 
@@ -198,18 +196,31 @@ ar_envelope rampTime input = zipWith (*) envelope input
 adsr :: Seconds -> Seconds -> Pulse -> Seconds -> Envelope
 adsr attackTime decayTime susLevel releaseTime = \vel duration input -> 
     let 
-        -- output = trace (show attackStep ++ show attack ++ "\n" ++ show decayStep ++ show decay ++ "\n" ++ show releaseStep ++ show release) $ zipWith (*) env input
         output = zipWith (*) env input
 
         env = attack ++ decay ++ sustain ++ release ++ repeat 0.0
 
-        attack = map (*attackStep) [0.0 .. vel/attackStep]
-        decay = map (*decayStep) $ reverse [vel*susLevel/decayStep .. vel/decayStep]
+        attack = if attackTime > 0 
+                then map (*attackStep) [0.0 .. vel/attackStep] 
+                else []
+        -- #TODO does [10..1] not work???
+        decay = if decayTime > 0 
+                then map (*decayStep) $ reverse [vel*susLevel/decayStep .. vel/decayStep] 
+                else []
+
 
         -- #TODO what if duration is less than attack + decay
         -- release won't start at sustain level
+        --  test this
+        decayStartLevel = if length attack + length decay < (floor $ duration*sampleRate)
+                            then susLevel*vel
+                            else (attack ++ decay) !! ((floor $ duration * sampleRate) - 1)
+
         sustain = replicate (max 0 $ (floor $ duration*sampleRate) - length attack - length decay) $ susLevel*vel
-        release = map (*releaseStep) $ reverse [0.0 .. vel*susLevel/releaseStep]
+        
+        release = if releaseTime > 0 
+                then map (*releaseStep) $ reverse [0.0 .. vel*susLevel/releaseStep]
+                else []
 
         attackStep = 1.0/(attackTime * sampleRate)
         decayStep = 1.0/(decayTime * sampleRate)
