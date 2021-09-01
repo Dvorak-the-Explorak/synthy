@@ -93,7 +93,10 @@ minorScale = scale [2, 1, 2, 2, 2, 1, 2]
 
 
 synth :: Synth
-synth = makePulsedSynth 0.8 pureTone
+-- synth = makePulsedSynth 0.8 pureTone
+synth = makePWMSynth lfo pureTone
+    where 
+        lfo t = 0.25 * (3 + pureTone (t/400))
 
 
 
@@ -109,20 +112,23 @@ pureTone = (sin . (*) (2*pi))
 sawTone :: Oscillator
 sawTone = (flip mod' 1.0)
 
-
-pulsed :: DutyCycle -> SynthGenerator -> SynthGenerator
-pulsed duty synthGen = synthGen . mult (pwTone duty)
-    where
-        mult f g x = (f x) * (g x)
-
-makePulsedSynth :: DutyCycle -> SynthGenerator
-makePulsedSynth duty = pulsed duty makeSynth
-
-makePWMSynth :: Oscillator -> SynthGenerator
-makePWMSynth lfo = 
-
 pwTone :: DutyCycle -> Oscillator
 pwTone duty = (\x -> if (x `mod'` 1.0 < duty) then 1.0 else 0.0)
+
+makePulsedSynth :: DutyCycle -> SynthGenerator
+makePulsedSynth duty = makeSynth . mult (pwTone duty)
+-- makePulsedSynth duty = \osc ->  makeSynth $ mult (pwTone duty) osc
+    where 
+        mult f g x = (f x) * (g x)
+
+
+-- synced to start of note only, no globally timed LFO
+makePWMSynth :: Oscillator -> SynthGenerator
+makePWMSynth lfo = makeSynth . mult modulator
+    where
+        mult f g x = (f x) * (g x)
+        modulator = (\x -> if (x `mod'` 1.0 < lfo x) then 1.0 else 0.0)
+
 
 -- take frequency, duration 
 -- return samples
