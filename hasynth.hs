@@ -8,8 +8,11 @@ import Data.Fixed
 import Data.Tuple.Extra
 -- import Debug.Trace
 
--- play with:
--- ffplay -f f32le -ar 48000 output.bin
+-- #TODO play from MIDI file
+-- #TODO percussion sounds - white noise
+
+
+
 
 type Seconds = Float
 type SamplesPerSecond = Float
@@ -187,9 +190,9 @@ locrian = scaleFromIntervals $ rot 6 [2, 2, 1, 2, 2, 2, 1]
 
 -- ==================================================================================
 
-synth :: Synth
+defaultSynth :: Synth
 -- synth = makePulsedSynth 0.8 pureTone
-synth = sawSynth 
+defaultSynth = sawSynth 
 -- synth = pureSynth
 
 pureSynth :: Synth
@@ -199,6 +202,11 @@ sawSynth = makeSynth sawTone
 squareSynth :: Synth
 squareSynth = makeSynth squareTone
 
+
+-- -- hmm
+-- whiteNoise :: Synth
+-- whtieNoise = makeSynth 
+
 pureTone :: Oscillator
 pureTone = (sin . (*) (2*pi))
 
@@ -207,7 +215,7 @@ sawTone :: Oscillator
 sawTone = \t -> 2 * (t `mod'` 1) - 1
 
 squareTone :: Oscillator
-squareTone = (\t -> if (t `mod'` 1.0 < 0.5) then -1.0 else -1.0)
+squareTone = (\t -> if (t `mod'` 1.0 < 0.5) then -1.0 else 1.0)
 
 -- synced to start of note only, no globally timed LFO
 makePWMSynth :: Oscillator -> SynthGenerator
@@ -277,20 +285,8 @@ adsr attackTime decayTime susLevel releaseTime = \vel duration input ->
 -- =====================================================
 -- =====================================================
 
-makeSongMaybe :: Scale ->  Pitch -> [(Maybe ScaleDegree, Seconds)] -> [Pulse]
-makeSongMaybe scale pitch notes = concat $ map (uncurry makeNote) notes
-    where
-        makeNote (Just n) d = env 1.0 (sq*d*0.8) $ synth ((freqFromPitch pitch) * (scale n)) (sq * d)
-        makeNote Nothing d = replicate (floor $ sq * d * sampleRate) 0.0
-        env :: Envelope
-        env = adsr (sq/8) (sq/2) 0.6 (sq)
-        sq = 60.0/tempo/4.0
-
-makeSong = makeSongMaybe
-
-
-makeSong2 :: Scale ->  Pitch -> Sequence -> [Pulse]
-makeSong2 scale pitch notes = concat $ map makeChord notes
+performSequence :: Synth -> Scale ->  Pitch -> Sequence -> [Pulse]
+performSequence synth scale pitch notes = concat $ map makeChord notes
     where
         makeChord :: ([ScaleDegree], Seconds) -> [Pulse]
         makeChord ([], d) = replicate (floor $ sq * d * sampleRate) 0.0
@@ -318,24 +314,27 @@ main = do
 song = B.toLazyByteString $ mconcat $ map B.floatLE wave
 
 wave :: [Pulse]
--- wave = makeSong lydian tonalCenter sailorsHornpipe
--- wave = makeSong2 ionian tonalCenter silentNight
+-- wave = performSequence defaultSynth lydian tonalCenter sailorsHornpipe
+-- wave = performSequence defaultSynth ionian tonalCenter silentNight
 -- wave = jumpTour
 -- wave = jumpTour2
-wave = map (/3) $ addSounds bassline $ addSounds melody chords 
-    where
-        modality = locrian
-        chords = makeSong2 modality tonalCenter silentNightChords
-        melody = makeSong2 modality tonalCenter silentNightMelody
-        bassline = makeSong2 modality tonalCenter silentNightBassline
+wave = silentNightFull
+-- wave = performSequence pureSynth ionian tonalCenter silentNightChords
 
+silentNightFull :: [Pulse]
+silentNightFull = map (/3) $ addSounds bassline $ addSounds melody chords 
+    where
+        modality = phrygian
+        chords = map (*2) $ performSequence pureSynth modality tonalCenter silentNightChords
+        melody = performSequence sawSynth modality tonalCenter silentNightMelody
+        bassline = performSequence squareSynth modality tonalCenter silentNightBassline
 
 jumpTour :: [Pulse]
-jumpTour = mconcat $ map (\scale -> makeSong2 scale tonalCenter jump) [ionian, dorian, phrygian, lydian, mixolydian, aeolian, locrian]
+jumpTour = mconcat $ map (\scale -> performSequence defaultSynth scale tonalCenter jump) [ionian, dorian, phrygian, lydian, mixolydian, aeolian, locrian]
 
 
 jumpTour2 :: [Pulse]
-jumpTour2 = mconcat $ map (\scale -> makeSong2 scale tonalCenter jump) [lydian, ionian, mixolydian, dorian, aeolian, phrygian, locrian]
+jumpTour2 = mconcat $ map (\scale -> performSequence defaultSynth scale tonalCenter jump) [lydian, ionian, mixolydian, dorian, aeolian, phrygian, locrian]
 
 
 save :: IO()
