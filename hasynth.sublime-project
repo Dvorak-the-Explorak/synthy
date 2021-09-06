@@ -1,0 +1,9 @@
+{
+	"build_systems": [
+		{
+			"name": "Compile and Run",
+			"cmd": ["runhaskell", "hasynth.hs"],
+			"selector": "source.haskell"
+		}
+	],
+}
