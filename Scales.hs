@@ -12,13 +12,13 @@ import Helpers
              
 
 scaleFromIntervals :: [Int] -> Scale
-scaleFromIntervals = scaleFromIntervalsTET 12
+scaleFromIntervals = scaleFromIntervalsTET
 
-scaleFromIntervalsTET :: Int -> [Int] -> Scale
-scaleFromIntervalsTET temperament gaps n | n < 0 = 1.0/(scaleFromIntervalsTET temperament (reverse gaps) (-n))
-                                       | n == 0 = 1.0
-                                       | n < 7 = (2 ** (1.0/(fromIntegral temperament))) ** (fromIntegral (scanl1 (+) gaps !! (n-1)))
-                                       | otherwise = 2 * (scaleFromIntervalsTET temperament gaps $ n-7)
+scaleFromIntervalsTET :: [Int] -> Scale
+scaleFromIntervalsTET gaps n | n < 0 = 1.0/(scaleFromIntervalsTET (reverse gaps) (-n))
+                             | n == 0 = 1.0
+                             | n < 7 = (2 ** (1.0/(fromIntegral $ sum gaps))) ** (fromIntegral (scanl1 (+) gaps !! (n-1)))
+                             | otherwise = 2 * (scaleFromIntervalsTET gaps $ n-7)
 
 
 majorScale :: Scale
@@ -41,5 +41,14 @@ locrian :: Scale
 locrian = scaleFromIntervals $ rot 6 [2, 2, 1, 2, 2, 2, 1]
 
 
+thiccIonian :: Scale
+thiccIonian = scaleFromIntervalsTET [1,1,0,1,1,1,0]
+
 ionian19TET :: Scale
-ionian19TET = scaleFromIntervalsTET 19 $ map (+1) [2, 2, 1, 2, 2, 2, 1]
+ionian19TET = scaleFromIntervalsTET $ map (+1) [2, 2, 1, 2, 2, 2, 1]
+
+ionian26TET :: Scale
+ionian26TET = scaleFromIntervalsTET $ map (+2) [2, 2, 1, 2, 2, 2, 1]
+
+sevenToneEqualTemp :: Scale
+sevenToneEqualTemp = scaleFromIntervalsTET [1,1,1,1,1,1,1]

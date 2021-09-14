@@ -72,14 +72,12 @@ addSounds = zipWith (+)
 -- =====================================================
 -- =====================================================
 
-performSequence :: Synth -> Scale ->  Pitch -> Sequence -> [Pulse]
-performSequence = performSequenceTET 12
+performSequence :: Hz -> Synth -> Scale -> Sequence -> [Pulse]
+performSequence = performSequenceTET
 
-performSequenceTET :: Int -> Synth -> Scale ->  Pitch -> Sequence -> [Pulse]
-performSequenceTET temperament synth scale pitch notes = concat $ map makeChord notes
+performSequenceTET :: Hz -> Synth -> Scale -> Sequence -> [Pulse]
+performSequenceTET keyHz synth scale notes = concat $ map makeChord notes
     where
-        keyHz = (freqFromPitchTET temperament pitch)
-
         makeChord :: ([ScaleDegree], Seconds) -> [Pulse]
         makeChord ([], d) = replicate (floor $ sq * d * sampleRate) 0.0
         makeChord (ns, d) =  map ((/(fromIntegral $ length ns)) . sum) $ transpose $ map (\n -> makeNote n d) ns
@@ -90,6 +88,8 @@ performSequenceTET temperament synth scale pitch notes = concat $ map makeChord 
         --                     in combined sounds
 
         makeNote n d = env 1.0 (sq*d) $ synth (keyHz * (scale n)) (sq * d)
+
+
         env :: Envelope
         env = adsr (sq/8) (sq/2) 0.6 (sq/10)
         sq = 60.0/tempo/4.0
@@ -247,7 +247,7 @@ wave :: [Pulse]
 -- wave = jumpTour
 -- wave = jumpTour2
 -- wave = silentNightFull locrian
-wave = silentNightFullTET 19 ionian19TET
+wave = silentNightFull thiccIonian
 -- wave = jumpFull phrygian
 -- wave = performSequence pureSynth ionian tonalCenter silentNightChords
 
@@ -255,32 +255,33 @@ wave = silentNightFullTET 19 ionian19TET
 silentNightFull :: Scale -> [Pulse]
 silentNightFull modality = map (/3) $ addSounds bassline $ addSounds melody chords 
     where
-        chords = map (*2) $ performSequence pureSynth modality tonalCenter silentNightChords
-        melody = performSequence sawSynth modality tonalCenter silentNightMelody
-        bassline = performSequence squareSynth modality tonalCenter silentNightBassline
+        chords = map (*2) $ performSequence (freqFromPitch tonalCenter) pureSynth modality silentNightChords
+        melody = performSequence (freqFromPitch tonalCenter) sawSynth modality silentNightMelody
+        bassline = performSequence (freqFromPitch tonalCenter) squareSynth modality silentNightBassline
 
-silentNightFullTET :: Int ->  Scale -> [Pulse]
-silentNightFullTET temperament modality = map (/3) $ addSounds bassline $ addSounds melody chords 
+silentNightFullTET :: Scale -> [Pulse]
+silentNightFullTET modality = map (/3) $ addSounds bassline $ addSounds melody chords 
     where
-        chords = map (*2) $ performSequenceTET temperament pureSynth modality tonalCenter silentNightChords
-        melody = performSequenceTET temperament sawSynth modality tonalCenter silentNightMelody
-        bassline = performSequenceTET temperament squareSynth modality tonalCenter silentNightBassline
+        -- #TODO reference frequency always 440, doesn't really make sense
+        chords = map (*2) $ performSequenceTET (freqFromPitch tonalCenter) pureSynth modality silentNightChords
+        melody = performSequenceTET (freqFromPitch tonalCenter) sawSynth modality silentNightMelody
+        bassline = performSequenceTET (freqFromPitch tonalCenter) squareSynth modality silentNightBassline
 
 jumpFull :: Scale -> [Pulse]
 jumpFull modality = map (/2) $ addSounds bassline chords
     where
-        bassline = performSequence squareSynth modality tonalCenter jumpBassline
-        chords = performSequence sawSynth modality tonalCenter jump
+        bassline = performSequence (freqFromPitch tonalCenter) squareSynth modality jumpBassline
+        chords = performSequence (freqFromPitch tonalCenter) sawSynth modality jump
 
 
 jumpTour :: [Pulse]
-jumpTour = mconcat $ map (\scale -> performSequence defaultSynth scale tonalCenter jump) modes
+jumpTour = mconcat $ map (\scale -> performSequence (freqFromPitch tonalCenter) defaultSynth scale jump) modes
     where 
         modes =  [ionian, dorian, phrygian, lydian, mixolydian, aeolian, locrian]
 
 
 jumpTour2 :: [Pulse]
-jumpTour2 = mconcat $ map (\scale -> performSequence defaultSynth scale tonalCenter jump) modes
+jumpTour2 = mconcat $ map (\scale -> performSequence (freqFromPitch tonalCenter) defaultSynth scale jump) modes
     where
         modes = [lydian, ionian, mixolydian, dorian, aeolian, phrygian, locrian]
 
@@ -298,3 +299,4 @@ play = do
     _ <- runCommand $ printf "ffplay -loglevel quiet -loop 1 -showmode 2 -f f32le -ar %f %s" sampleRate filename
     return ()
 
+--ffmpeg -f f32le -ar 48000.0 -i output.bin output.mp3
