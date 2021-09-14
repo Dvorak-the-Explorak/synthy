@@ -4,6 +4,7 @@ module General where
 type Seconds = Float
 type SamplesPerSecond = Float
 type Hz = Float
+type Phase = Float
 type Pulse = Float
 type ScaleDegree = Int
 type Beats = Float

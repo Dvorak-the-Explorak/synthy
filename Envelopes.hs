@@ -1,6 +1,6 @@
 module Envelopes where
 
-import General
+import General (Envelope, Seconds, Pulse, sampleRate)
 
 -- ramp up/down time -> input -> output
 ar_envelope :: Seconds -> [Pulse] -> [Pulse]

@@ -6,8 +6,8 @@ import General
 
 
 type Synth = Hz -> Seconds -> [Pulse]
-type Oscillator = Seconds -> Pulse
-type SynthGenerator = Oscillator -> Synth
+type Waveform = Seconds -> Pulse
+type SynthGenerator = Waveform -> Synth
 
 
 defaultSynth :: Synth
@@ -27,18 +27,18 @@ squareSynth = makeSynth squareTone
 -- whiteNoise :: Synth
 -- whtieNoise = makeSynth 
 
-pureTone :: Oscillator
+pureTone :: Waveform
 pureTone = (sin . (*) (2*pi))
 
-sawTone :: Oscillator
+sawTone :: Waveform
 -- sawTone = (flip (-) 1) . (*2) . (flip mod' 1.0)
 sawTone = \t -> 2 * (t `mod'` 1) - 1
 
-squareTone :: Oscillator
+squareTone :: Waveform
 squareTone = (\t -> if (t `mod'` 1.0 < 0.5) then -1.0 else 1.0)
 
 -- synced to start of note only, no globally timed LFO
-makePWMSynth :: Oscillator -> SynthGenerator
+makePWMSynth :: Waveform -> SynthGenerator
 makePWMSynth lfo = makeSynth . mult modulator
     where
         mult f g x = (f x) * (g x)
