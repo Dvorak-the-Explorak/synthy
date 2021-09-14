@@ -15,10 +15,10 @@ scaleFromIntervals :: [Int] -> Scale
 scaleFromIntervals = scaleFromIntervalsTET 12
 
 scaleFromIntervalsTET :: Int -> [Int] -> Scale
-scaleFromIntervalsTET temperament gaps n | n < 0 = 1.0/(scaleFromIntervals (reverse gaps) (-n))
+scaleFromIntervalsTET temperament gaps n | n < 0 = 1.0/(scaleFromIntervalsTET temperament (reverse gaps) (-n))
                                        | n == 0 = 1.0
                                        | n < 7 = (2 ** (1.0/(fromIntegral temperament))) ** (fromIntegral (scanl1 (+) gaps !! (n-1)))
-                                       | otherwise = 2 * (scaleFromIntervals gaps $ n-7)
+                                       | otherwise = 2 * (scaleFromIntervalsTET temperament gaps $ n-7)
 
 
 majorScale :: Scale

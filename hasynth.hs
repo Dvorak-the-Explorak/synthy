@@ -82,7 +82,7 @@ performSequenceTET temperament synth scale pitch notes = concat $ map makeChord 
 
         makeChord :: ([ScaleDegree], Seconds) -> [Pulse]
         makeChord ([], d) = replicate (floor $ sq * d * sampleRate) 0.0
-        makeChord (ns, d) =  map sum $ transpose $ map (\n -> makeNote n d) ns
+        makeChord (ns, d) =  map ((/(fromIntegral $ length ns)) . sum) $ transpose $ map (\n -> makeNote n d) ns
         -- makeChord (ns, d) = let 
         --                         sounds = map (\n -> makeNote n d) ns
         --                         combined [] = []
@@ -229,10 +229,17 @@ injectWith combine op = state $ first combine . unzip . fmap (runState op)
 main = do
     putStrLn $ printf "Playing song in %s" $ show tonalCenter 
     play
+    -- printSong
     putStrLn $ "made " ++ filename
 
 -- B.floatLE is float little endian
 song = B.toLazyByteString $ mconcat $ map B.floatLE wave
+
+printSong :: IO ()
+printSong = putStrLn $ concatMap ((++" ") . show) $ zip scaleDegrees freqs
+    where
+        scaleDegrees = [-7..21]
+        freqs = map ionian19TET scaleDegrees
 
 wave :: [Pulse]
 -- wave = performSequence defaultSynth dorian tonalCenter jump
@@ -255,9 +262,9 @@ silentNightFull modality = map (/3) $ addSounds bassline $ addSounds melody chor
 silentNightFullTET :: Int ->  Scale -> [Pulse]
 silentNightFullTET temperament modality = map (/3) $ addSounds bassline $ addSounds melody chords 
     where
-        chords = map (*2) $ performSequenceTET 19 pureSynth modality tonalCenter silentNightChords
-        melody = performSequenceTET 19 sawSynth modality tonalCenter silentNightMelody
-        bassline = performSequenceTET 19 squareSynth modality tonalCenter silentNightBassline
+        chords = map (*2) $ performSequenceTET temperament pureSynth modality tonalCenter silentNightChords
+        melody = performSequenceTET temperament sawSynth modality tonalCenter silentNightMelody
+        bassline = performSequenceTET temperament squareSynth modality tonalCenter silentNightBassline
 
 jumpFull :: Scale -> [Pulse]
 jumpFull modality = map (/2) $ addSounds bassline chords
@@ -284,7 +291,7 @@ save = saveAs filename
 saveAs :: FilePath -> IO()
 saveAs path = B.writeFile path song
 
-play :: IO()
+play :: IO ()
 play = do
     save
     -- runCommand :: String -> IO (processHandleOrSomething)
