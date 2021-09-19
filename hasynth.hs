@@ -41,13 +41,22 @@ noteNames = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
 
 freqFromPitch :: Pitch -> Hz
 freqFromPitch (Pitch 9 4) = 440.0
-freqFromPitch (Pitch pc oct) = 2.0**((fromIntegral oct)-4 + ((fromIntegral pc)-9)/12.0) * (freqFromPitch $ Pitch 9 4)
+freqFromPitch (Pitch pc oct) = let 
+        oct' = fromIntegral oct
+        pc' = fromIntegral pc
+        aRef = (freqFromPitch $ Pitch 9 4)
+    in 2.0**(oct'-4 + (pc'-9)/12.0) * aRef
                         
 
 -- #TODO Reference pitch is a bit nonsense when not in 12TET
 freqFromPitchTET :: Int -> Pitch -> Hz
 freqFromPitchTET _ (Pitch 9 4) = 440.0
-freqFromPitchTET temperament (Pitch pc oct) = 2.0** ((fromIntegral oct)-4.0 + ((fromIntegral pc)-9)/(fromIntegral temperament)) * (freqFromPitchTET temperament $ Pitch 9 4)
+freqFromPitchTET temperament (Pitch pc oct) = let 
+        oct' = fromIntegral oct
+        temp' = fromIntegral temperament
+        pc' = fromIntegral pc
+        aRef = freqFromPitchTET temperament $ Pitch 9 4
+    in 2.0** (oct'-4.0 + (pc'-9)/temp') * aRef
 
 -- ================================================================
 -- ================================================================
@@ -80,7 +89,7 @@ performSequenceTET keyHz synth scale notes = concat $ map makeChord notes
     where
         makeChord :: ([ScaleDegree], Seconds) -> [Pulse]
         makeChord ([], d) = replicate (floor $ sq * d * sampleRate) 0.0
-        makeChord (ns, d) =  map ((/(fromIntegral $ length ns)) . sum) $ transpose $ map (\n -> makeNote n d) ns
+        makeChord (ns, d) =  map ((/(fromIntegral $ length ns)) . sum) $ transpose $ map (flip makeNote d) ns
         -- makeChord (ns, d) = let 
         --                         sounds = map (\n -> makeNote n d) ns
         --                         combined [] = []
@@ -153,15 +162,17 @@ voiceOff = state $ \(osc, vol) -> ((), (osc, snd $ runState noteOffEnv vol))
     
 -- what a F** mess
 
--- #TODO give this an enum for currentState
+data EnvSegment = EnvAttack | EnvDecay | EnvSustain | EnvRelease | EnvDone
+  deriving (Eq, Ord, Enum)
 data VolEnv1 = VolEnv1 {
         attackSlope :: Float,
         decaySlope :: Float,
         sustainLevel :: Float,
         releaseSlope :: Float,
-        currentState :: Int,
+        currentState :: EnvSegment,
         volume :: Volume
     }
+    
 data OscState1 = OscState1 {
     wave :: Waveform,
     phase :: Phase,
@@ -175,9 +186,18 @@ type VoiceState1 = (OscState1, VolEnv1)
 type SynthState1 = ([VoiceState1], [NoteNumber]) 
 
 
-
+-- env :: Envelope
+-- env = adsr (sq/8) (sq/2) 0.6 (sq/10)
+-- sq = 60.0/tempo/4.0
+-- #TODO un-hardcode this
 voiceFromNote :: NoteNumber -> VoiceState1
-voiceFromNote note = undefined
+voiceFromNote note = first (\osc -> osc{freq = hzFromNoteNumber note}) defaultVoice
+
+defaultVoice :: VoiceState1
+defaultVoice = let sq = 60.0/tempo/4.0
+                     in (OscState1 {wave=squareTone, phase=0.0, freq=1.0},
+                        VolEnv1 {attackSlope=sq/8, decaySlope=sq/2, sustainLevel=0.6, releaseSlope=sq/8,
+                                currentState=EnvAttack, volume=0})
 
 stepOsc1 :: Seconds -> State OscState1 Pulse
 -- stepOsc1 dt = state $ \(wave, phase, hz) -> (wave $ phase + dt*hz, (wave, phase + dt*hz, hz))
@@ -185,39 +205,39 @@ stepOsc1 dt = state $ \osc -> let newPhase = phase osc + dt*(freq osc)
                                 in (wave osc $ newPhase, osc {phase = newPhase})
 
 restartEnv1 :: VolEnv1 -> VolEnv1
-restartEnv1 venv = venv { currentState = 0}
+restartEnv1 venv = venv { currentState = EnvAttack}
 
 restartEnvVoice1 :: VoiceState1 -> VoiceState1
 restartEnvVoice1 = second restartEnv1
 
+
 -- This is super messy :(
 stepEnv1 :: Seconds -> State VolEnv1 Volume
 stepEnv1 dt = state $ \venv -> case currentState venv of
-    -- #TODO what if attackSlope is 0
-    0 -> let nextVol = volume venv + (attackSlope venv) * dt 
-             overStep = dt - (1 - volume venv) / (attackSlope venv)
-        in  if nextVol <= 1.0 
-            then (nextVol, venv {volume = nextVol}) 
-            else runState (stepEnv1 overStep) (venv { volume=1.0, currentState = 1})
-    -- #TODO end of decay needs to go to sustain
-    1 -> let nextVol = volume venv - (decaySlope venv) * dt 
-             overStep = dt - (volume venv - sustainLevel venv)/(decaySlope venv)
-        in if nextVol >= (sustainLevel venv)
-            then (nextVol, venv {volume = nextVol})
-            else runState (stepEnv1 overStep) (venv { volume=sustainLevel venv, currentState = 2})        
-    2 -> (volume venv, venv) -- sustain, nothing changes
-    3 -> let nextVol = volume venv - (releaseSlope venv) * dt 
-             overStep = dt - (volume venv) / (releaseSlope venv)
-        in if nextVol >= 0
-            then (nextVol, venv {volume = nextVol})
-            else (0.0, venv {currentState = 4})
-    4 -> (0, venv) -- stopped, ready for GC
+  -- #TODO what if attackSlope is 0
+  EnvAttack ->  let nextVol = volume venv + (attackSlope venv) * dt 
+                    overStep = dt - (1 - volume venv) / (attackSlope venv)
+                in if nextVol <= 1.0 
+                    then (nextVol,     venv {volume = nextVol}) 
+                    else runState (stepEnv1 overStep) (venv { volume=1.0, currentState = EnvDecay})
+  EnvDecay -> let nextVol = volume venv - (decaySlope venv) * dt 
+                  overStep = dt - (volume venv - sustainLevel venv)/(decaySlope venv)
+              in if nextVol >= (sustainLevel venv)
+                  then (nextVol, venv {volume = nextVol})
+                  else runState (stepEnv1 overStep) (venv { volume=sustainLevel venv, currentState = EnvSustain})        
+  EnvSustain -> (volume venv, venv) -- sustain, nothing changes
+  EnvRelease -> let nextVol = volume venv - (releaseSlope venv) * dt 
+                    overStep = dt - (volume venv) / (releaseSlope venv)
+                in if nextVol >= 0
+                    then (nextVol, venv {volume = nextVol})
+                    else (0.0, venv {currentState = EnvDone})
+  EnvDone -> (0, venv) -- stopped, ready for GC
 
 
 
 -- jump to decay section of envelope
 noteOffEnv1 :: VolEnv1 -> VolEnv1
-noteOffEnv1 venv = venv {currentState=3}
+noteOffEnv1 venv = venv {currentState=EnvRelease}
 -- state can be made with:
 -- noteOffEnv1 :: State VolEnv1 ()
 -- noteOffEnv1 = modify noteOffEnv1
@@ -245,7 +265,7 @@ stepSynth1 dt = state $ \(voices, notes) ->
     let (pulses, steppedVoices) = runState (stateMap $ stepVoice1 dt) voices
         -- running :: (VoiceState1, NoteNumber) -> Boolean
         -- running :: ((OscState1, VolEnv1), NoteNumber) -> Boolean
-        running = ((<4) . currentState . snd . fst) 
+        running = ((<EnvDone) . currentState . snd . fst) 
         states' = unzip $ filter running $ zip steppedVoices notes
     in (sum pulses, states')
 
@@ -259,8 +279,10 @@ noteOnSynth1 note = modify $ \(voices, notes) ->
     let states :: [(VoiceState1, NoteNumber)]
         states = zip voices notes
     in if any (== note) notes
-        then unzip $ mapWhere ((==note) . snd) (first (second  restartEnv1)) states  --revert envelope to state 1
-        else ((voiceFromNote note):voices, note:notes) --add a new voice for that note
+        -- revert envelope to state 1
+        then unzip $ mapWhere ((==note) . snd) (first (second  restartEnv1)) states 
+        -- add a new voice for that note
+        else ((voiceFromNote note):voices, note:notes)
     
 
 -- first :: (a -> c) -> (a,b) -> (c,b)
