@@ -104,62 +104,9 @@ performSequenceTET keyHz synth scale notes = concat $ map makeChord notes
         sq = 60.0/tempo/4.0
 
 
--- =================================================================================
--- =================================================================================
--- =================================================================================
--- =================================================================================
-
-
--- #TODO this probably doesn't all need to be in the state monad
---      Lens might be better...
-
-
+-- ==========================================================================
 type Volume = Float
 
-
-type VolumeEnvelope = Either ([Volume], [Volume]) [Volume]
-type FrequencyEnvelope = ([Hz], [Hz])
-
-type OscState = (Waveform, Phase, Hz)
-type VoiceState = (OscState, VolumeEnvelope)
-
-stepOscillator :: Seconds -> State OscState Pulse
-stepOscillator dt = state $ \(wave, phase, hz) -> (wave $ phase + dt*hz, (wave, phase + dt*hz, hz))
-
-stepEnvelope :: Seconds -> State VolumeEnvelope Volume
-stepEnvelope dt = state $ \venv -> case venv of
-    Left ([v], decay) -> (v, Left ([v], decay))
-    Left (v:vs, decay) -> (v, Left (vs, decay))
-    Left ([], decay) -> (1.0, Left ([], decay))
-    Right (d:ds) -> (d, Right ds)
-    Right ([]) -> (0.0, Right [])
-
-
-noteOffEnv :: State VolumeEnvelope ()
-noteOffEnv = state $ \venv -> case venv of
-    Left (_, decay) -> ((), Right decay)
-    Right decay -> ((), Right decay)
-
-
-
-
--- stepVoice :: Seconds -> State VoiceState Pulse
--- stepVoice dt = state $ \(osc, vol) -> let
---     (val, osc') = runState (stepOscillator dt) osc
---     (v, vol') = runState (stepEnvelope dt) vol
---     in (v*val, (osc', vol'))
-
-stepVoice :: Seconds -> State VoiceState Pulse
-stepVoice dt = pairStatesWith (*) (stepOscillator dt) (stepEnvelope dt)
-
-voiceOff :: State VoiceState ()
-voiceOff = state $ \(osc, vol) -> ((), (osc, snd $ runState noteOffEnv vol))
-
-
-
--- =================================================================================
--- =================================================================================
-    
 -- what a F** mess
 
 data EnvSegment = EnvAttack | EnvDecay | EnvSustain | EnvRelease | EnvDone
@@ -180,9 +127,13 @@ data OscState1 = OscState1 {
 }
 
 -- #TODO a voice should be allowed to mix multiple oscillators... 
+--  constructing a SynthState1 should take a voice constructor :: Note -> VoiceState1
+--  then we could replace OscState1 with [OscState1]
 type VoiceState1 = (OscState1, VolEnv1)
 
 -- #TODO should maybe be called an instrument 
+--  SynthState1 should include LFOs
+ -- should SynthState1 include current time?
 type SynthState1 = ([VoiceState1], [NoteNumber]) 
 
 
@@ -194,21 +145,27 @@ voiceFromNote :: NoteNumber -> VoiceState1
 voiceFromNote note = first (\osc -> osc{freq = hzFromNoteNumber note}) defaultVoice
 
 defaultVoice :: VoiceState1
-defaultVoice = let sq = 60.0/tempo/4.0
-                     in (OscState1 {wave=squareTone, phase=0.0, freq=1.0},
-                        VolEnv1 {attackSlope=sq/8, decaySlope=sq/2, sustainLevel=0.6, releaseSlope=sq/8,
-                                currentState=EnvAttack, volume=0})
+defaultVoice = (OscState1 {wave=sawTone, phase=0.0, freq=1.0},
+                VolEnv1 {attackSlope=2, decaySlope=1, sustainLevel=0.6, releaseSlope=1,
+                        currentState=EnvAttack, volume=0})
 
 stepOsc1 :: Seconds -> State OscState1 Pulse
 -- stepOsc1 dt = state $ \(wave, phase, hz) -> (wave $ phase + dt*hz, (wave, phase + dt*hz, hz))
-stepOsc1 dt = state $ \osc -> let newPhase = phase osc + dt*(freq osc)
+stepOsc1 dt = state $ \osc -> let newPhase = flip mod' 1.0 $ phase osc + dt*(freq osc)
                                 in (wave osc $ newPhase, osc {phase = newPhase})
+
 
 restartEnv1 :: VolEnv1 -> VolEnv1
 restartEnv1 venv = venv { currentState = EnvAttack}
 
-restartEnvVoice1 :: VoiceState1 -> VoiceState1
-restartEnvVoice1 = second restartEnv1
+-- jump to decay section of envelope
+noteOffEnv1 :: VolEnv1 -> VolEnv1
+noteOffEnv1 venv = venv {currentState=EnvRelease}
+-- #TODO May need soe better naming convention to distinguish state operations and regular functinos
+-- state operation can be made with:
+-- noteOffEnv1 :: State VolEnv1 ()
+-- noteOffEnv1 = modify noteOffEnv1
+
 
 
 -- This is super messy :(
@@ -224,10 +181,10 @@ stepEnv1 dt = state $ \venv -> case currentState venv of
                   overStep = dt - (volume venv - sustainLevel venv)/(decaySlope venv)
               in if nextVol >= (sustainLevel venv)
                   then (nextVol, venv {volume = nextVol})
-                  else runState (stepEnv1 overStep) (venv { volume=sustainLevel venv, currentState = EnvSustain})        
+                  else runState (stepEnv1 overStep) $
+                        (venv { volume=sustainLevel venv, currentState = EnvSustain})        
   EnvSustain -> (volume venv, venv) -- sustain, nothing changes
-  EnvRelease -> let nextVol = volume venv - (releaseSlope venv) * dt 
-                    overStep = dt - (volume venv) / (releaseSlope venv)
+  EnvRelease -> let nextVol = (volume venv) - (releaseSlope venv) * dt 
                 in if nextVol >= 0
                     then (nextVol, venv {volume = nextVol})
                     else (0.0, venv {currentState = EnvDone})
@@ -235,31 +192,30 @@ stepEnv1 dt = state $ \venv -> case currentState venv of
 
 
 
--- jump to decay section of envelope
-noteOffEnv1 :: VolEnv1 -> VolEnv1
-noteOffEnv1 venv = venv {currentState=EnvRelease}
--- state can be made with:
--- noteOffEnv1 :: State VolEnv1 ()
--- noteOffEnv1 = modify noteOffEnv1
+
 
 stepVoice1 :: Seconds -> State VoiceState1 Pulse
 stepVoice1 dt = pairStatesWith (*) (stepOsc1 dt) (stepEnv1 dt)
 
+
 -- #TODO should voice have NoteNumber, so this takes note number and does nothign if they don't match?
-noteOffVoice1 :: State VoiceState1 ()
-noteOffVoice1 = pairStatesWith const idState (modify noteOffEnv1)
+-- noteOffVoice1 :: State VoiceState1 ()
+-- noteOffVoice1 = pairStatesWith const idState (modify noteOffEnv1)
+-- noteOffVoice1 :: VoiceState1 -> VoiceState1
+-- noteOffVoice1 = second noteOffEnv1
+-- SHOLDN'T be called noteOff when there's no reference to NoteNuber in the Voice type
+releaseVoice1 :: VoiceState1 -> VoiceState1
+releaseVoice1 = second noteOffEnv1
 
+-- restartVoice1 :: State VoiceState1 ()
+-- restartVoice1 = pairStatesWith const idState (modify restartEnv1)
+restartVoice1 :: VoiceState1 -> VoiceState1
+restartVoice1 = second restartEnv1
 
--- const :: b -> a -> b
--- flip const :: a -> b -> b
--- -- for synth :: [voice]
--- stepSynth1 :: State SynthState1 Pulse
--- -- stepSynth1 = state $ \synth ->  let (pulses, states) = stateMap stepVoice1 synth
--- --                                     states' = filter ((<4) . currentState . second) states
--- --                                 in (sum pulses, states')
--- stepSynth1 = fmap sum $ stateMap stepVoice1
 
 -- for synth :: ([voice], [notenumber])
+
+-- #TODO is it okay to just sym the synths?  Could do some sort of compression on output
 stepSynth1 :: Seconds -> State SynthState1 Pulse
 stepSynth1 dt = state $ \(voices, notes) ->  
     let (pulses, steppedVoices) = runState (stateMap $ stepVoice1 dt) voices
@@ -269,27 +225,79 @@ stepSynth1 dt = state $ \(voices, notes) ->
         states' = unzip $ filter running $ zip steppedVoices notes
     in (sum pulses, states')
 
--- #TODO how do I keep track of which voices go with which notes?  
+-- #TODO is ([Voice], [MidiNote]) the best way to keep track of which note each voice corresponds?
+--          need to know in order to handle NoteOff        
 --  instead of [Voice] have map MidiNote -> Voice?
---  [Voice] and [MidiNote]?
+--  Voice could include its MidiNote?
+
+restartVoices :: NoteNumber -> ([VoiceState1], [NoteNumber]) -> ([VoiceState1], [NoteNumber])
+restartVoices note (voices, notes) = unzip $ mapWhere 
+                                              ((==note) . snd) 
+                                              (first restartVoice1) 
+                                              $ zip voices notes
+releaseVoices :: NoteNumber -> ([VoiceState1], [NoteNumber]) -> ([VoiceState1], [NoteNumber])
+releaseVoices note (voices, notes) = unzip $ mapWhere 
+                                              ((==note) . snd) 
+                                              (first releaseVoice1) 
+                                              $ zip voices notes
+
 noteOnSynth1 :: NoteNumber -> State SynthState1 ()
 -- if there are any voices for that note, set the envelope to state 0
 --  otherwise add a new voice for the note
 noteOnSynth1 note = modify $ \(voices, notes) -> 
-    let states :: [(VoiceState1, NoteNumber)]
-        states = zip voices notes
-    in if any (== note) notes
-        -- revert envelope to state 1
-        then unzip $ mapWhere ((==note) . snd) (first (second  restartEnv1)) states 
-        -- add a new voice for that note
-        else ((voiceFromNote note):voices, note:notes)
-    
+    if any (== note) notes
+      -- revert envelope to state 1
+      then restartVoices note (voices, notes)
+      -- add a new voice for that note
+      else ((voiceFromNote note):voices, note:notes)
+
+noteOffSynth1 :: NoteNumber -> State SynthState1 ()
+-- if there are any voices for that note, set the envelope to state 0
+noteOffSynth1 note = modify $ releaseVoices note 
+
+
+-- #TODO give voices a "run" function 
+--      so this doesn't have to step all the states for each sample
+-- #TODO handle midi timing with fractional samples
+runSynth1 :: Seconds -> State SynthState1 [Pulse]
+runSynth1 dt | dt < (1.0/sampleRate) = return []
+             | otherwise = do 
+                  pulse <- stepSynth1 (1.0/sampleRate)
+                  pulses <- runSynth1 (dt - (1.0/sampleRate))
+                  return (pulse:pulses)
+
+
+data ToyMidi = ToyNoteOn NoteNumber Seconds | ToyNoteOff NoteNumber Seconds | ToyNothing Seconds
+
+
+synthesiseMidi :: [ToyMidi] -> State SynthState1 [Pulse]
+synthesiseMidi [] = return []
+synthesiseMidi ((ToyNoteOn note dt):mids) = do 
+  output <- runSynth1 dt
+  noteOnSynth1 note
+  remainder <- synthesiseMidi mids
+  return $ output ++ remainder
+synthesiseMidi ((ToyNoteOff note dt):mids) = do
+    output <- runSynth1 dt
+    noteOffSynth1 note
+    remainder <- synthesiseMidi mids
+    return $ output ++ remainder
+synthesiseMidi ((ToyNothing dt):mids) = do
+    output <- runSynth1 dt
+    remainder <- synthesiseMidi mids
+    return $ output ++ remainder
+
+testSeq1 :: [ToyMidi]
+testSeq1 = [ToyNoteOn 69 0, ToyNoteOff 69 5,
+            ToyNothing 5]
+
+testSeq2 :: [ToyMidi]
+testSeq2 = [ToyNoteOn 69 0, ToyNoteOn 73 0.5, ToyNoteOn 76 0.5, ToyNoteOn 81 0.5, 
+            ToyNoteOff 69 2, ToyNoteOff 73 0, ToyNoteOff 76 0, ToyNoteOff 81 0,
+            ToyNothing 5]
+
 
 -- first :: (a -> c) -> (a,b) -> (c,b)
--- second :: (b -> c) -> (a,b) -> (a,c)
-
--- first . second :: (b -> d) -> ((a,b), c) -> ((a,d), c)
-
 
 -- =====================================================
 -- =====================================================
@@ -310,12 +318,13 @@ printSong = putStrLn $ concatMap ((++" ") . show) $ zip scaleDegrees freqs
         freqs = map ionian19TET scaleDegrees
 
 output :: [Pulse]
+output = fst $ runState (synthesiseMidi testSeq2) ([], [])
+-- output = silentNightFull thiccIonian
 -- output = performSequence defaultSynth dorian tonalCenter jump
 -- output = performSequence defaultSynth ionian tonalCenter silentNight
 -- output = jumpTour
 -- output = jumpTour2
 -- output = silentNightFull locrian
-output = silentNightFull thiccIonian
 -- output = jumpFull phrygian
 -- output = performSequence pureSynth ionian tonalCenter silentNightChords
 
