@@ -20,7 +20,8 @@ loop 0 _ = []
 loop 1 xs = xs
 loop n xs = xs ++ loop (n-1) xs
 
-
+transposeSequence :: ScaleDegree -> Sequence -> Sequence
+transposeSequence offset = map $ first $ map (+offset)
 
 
 
@@ -111,6 +112,10 @@ jumpBassline = transposeSequence (-21) $ (loop 2 intro) ++ (loop 2 verse)
     where
         intro = [([0, 7], 50), ([3, 10], 4), ([4, 11], 4), ([11], 2), ([10], 2), ([11], 2)]
         verse = (loop 25 [([0, 7], 1), ([], 1)]) ++ [([3, 10], 4), ([4, 11], 4), ([11], 2), ([10], 2), ([11], 2)]
-transposeSequence :: ScaleDegree -> Sequence -> Sequence
-transposeSequence offset = map $ first $ map (+offset)
+
+
+
+
+
+
 

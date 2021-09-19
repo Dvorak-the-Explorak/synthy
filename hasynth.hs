@@ -17,46 +17,12 @@ import Synths
 import Scales
 import Envelopes
 import Helpers
+import DiatonicSequencer
 -- import Debug.Trace
 
 -- #TODO play from MIDI file
 -- #TODO percussion sounds - white noise
 
-
-data Pitch = Pitch {
-    pitchClass :: Int,
-    octave :: Int
-}
-
-instance Show Pitch where
-    show (Pitch n oct) | n >=0 && n < 12 = (noteNames !! n) ++ (show oct)
-                      | otherwise = (noteNames !! (n `mod` 12)) ++ (show $ oct + n `div` 12)
-
--- enharmonic spellings ignored
-noteNames = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
-
--- pitchFromString str | (str !! 1) == '#' = Pitch (find (== take 2 str) noteNames) (read $ drop 2 str)
---                     | otherwise = Pitch (find (== take 1 str) noteNames) (read $ drop 1 str)
-
-
-freqFromPitch :: Pitch -> Hz
-freqFromPitch (Pitch 9 4) = 440.0
-freqFromPitch (Pitch pc oct) = let 
-        oct' = fromIntegral oct
-        pc' = fromIntegral pc
-        aRef = (freqFromPitch $ Pitch 9 4)
-    in 2.0**(oct'-4 + (pc'-9)/12.0) * aRef
-                        
-
--- #TODO Reference pitch is a bit nonsense when not in 12TET
-freqFromPitchTET :: Int -> Pitch -> Hz
-freqFromPitchTET _ (Pitch 9 4) = 440.0
-freqFromPitchTET temperament (Pitch pc oct) = let 
-        oct' = fromIntegral oct
-        temp' = fromIntegral temperament
-        pc' = fromIntegral pc
-        aRef = freqFromPitchTET temperament $ Pitch 9 4
-    in 2.0** (oct'-4.0 + (pc'-9)/temp') * aRef
 
 -- ================================================================
 -- ================================================================
@@ -64,51 +30,13 @@ freqFromPitchTET temperament (Pitch pc oct) = let
 filename :: FilePath
 filename = "output.bin"
 
-tempo :: Beats
-tempo = 88.0
-
-tonalCenter :: Pitch
-tonalCenter = Pitch 9 4
-
--- ================================
-
-addSounds :: [Pulse] -> [Pulse] -> [Pulse]
-addSounds = zipWith (+)
-
--- ==================================================================================
 
 
--- =====================================================
--- =====================================================
-
-performSequence :: Hz -> Synth -> Scale -> Sequence -> [Pulse]
-performSequence = performSequenceTET
-
-performSequenceTET :: Hz -> Synth -> Scale -> Sequence -> [Pulse]
-performSequenceTET keyHz synth scale notes = concat $ map makeChord notes
-    where
-        makeChord :: ([ScaleDegree], Seconds) -> [Pulse]
-        makeChord ([], d) = replicate (floor $ sq * d * sampleRate) 0.0
-        makeChord (ns, d) =  map ((/(fromIntegral $ length ns)) . sum) $ transpose $ map (flip makeNote d) ns
-        -- makeChord (ns, d) = let 
-        --                         sounds = map (\n -> makeNote n d) ns
-        --                         combined [] = []
-        --                         combined xs = (sum $ map head xs):combined (map tail xs)
-        --                     in combined sounds
-
-        makeNote n d = env 1.0 (sq*d) $ synth (keyHz * (scale n)) (sq * d)
 
 
-        env :: Envelope
-        env = adsr (sq/8) (sq/2) 0.6 (sq/10)
-        sq = 60.0/tempo/4.0
 
 
--- ==========================================================================
-type Volume = Float
 
--- #TODO continue cleaning up this mess
-    
 data Oscillator = Oscillator {
     wave :: Waveform,
     phase :: Phase,
@@ -130,9 +58,13 @@ data VolEnv = VolEnv {
 --  then we could replace Oscillator with [Oscillator]
 type Voice = (Oscillator, VolEnv)
 
--- #TODO should maybe be called an instrument 
+-- #TODO should maybe be called an instrument / sequencer 
 --  VoicedSynth should include LFOs
  -- should VoicedSynth include current time?
+-- #TODO is ([Voice], [NoteNumber]) the best way to keep track of which note each voice corresponds?
+--          need to know in order to handle NoteOff        
+--  instead of [Voice] have map MidiNote -> Voice?
+--  Voice could include its MidiNote?
 type VoicedSynth = ([Voice], [NoteNumber]) 
 
 
@@ -149,9 +81,20 @@ defaultVoice = (Oscillator {wave=sawTone, phase=0.0, freq=1.0},
                         currentState=EnvAttack, volume=0})
 
 stepOsc :: Seconds -> State Oscillator Pulse
--- stepOsc dt = state $ \(wave, phase, hz) -> (wave $ phase + dt*hz, (wave, phase + dt*hz, hz))
 stepOsc dt = state $ \osc -> let newPhase = flip mod' 1.0 $ phase osc + dt*(freq osc)
-                                in (wave osc $ newPhase, osc {phase = newPhase})
+                                in ( (*0.1) $ wave osc $ newPhase, osc {phase = newPhase})
+
+-- should basically act like iterating stepOsc N times
+runOsc :: Int -> Seconds -> State Oscillator [Pulse]
+runOsc 0 dt = return []
+runOsc n dt = do
+  osc <- get
+  let nextPhase = flip mod' 1.0 $ (phase osc) + dt*(freq osc)*(fromIntegral n)
+  let phases = map (\i -> (dt*(freq osc)*(fromIntegral i)) + phase osc) [1..n]
+  let outputs = map (wave osc) $ phases
+  put $ osc {phase = nextPhase}
+  return outputs
+
 
 
 restartEnv :: VolEnv -> VolEnv
@@ -162,7 +105,7 @@ noteOffEnv :: VolEnv -> VolEnv
 noteOffEnv venv = venv {currentState=EnvRelease}
 
 
--- This is super messy :(
+-- This still feels pretty messy
 stepEnv :: Seconds -> State VolEnv Volume
 stepEnv dt = state $ \venv -> case currentState venv of
   -- #TODO what if attackSlope is 0
@@ -184,7 +127,34 @@ stepEnv dt = state $ \venv -> case currentState venv of
                     else (0.0, venv {currentState = EnvDone})
   EnvDone -> (0, venv) -- stopped, ready for GC
 
-
+-- runEnv :: Int -> Seconds -> State VolEnv [Volume]
+-- runEnv 0 dt = return []
+-- runEnv n dt = state $ \venv -> case currentState venv of
+--   EnvAttack ->  let steps = take n $ tail $ iterate (+dt) (volume venv)
+--                     valid = takeWhile (<=1) steps
+--                     oversteps = dropWhile (<=1) steps
+--                     (moreSteps, state') = runState (runenv (length oversteps) dt) 
+--                                             (venv {volume = last valid, currentState = EnvSustain})
+--                 in if length oversteps == 0
+--                     then (steps, venv {volume = last steps})
+--                     else (valid ++ moreSteps, state')
+--                     nextVol = volume venv + (attackSlope venv) * dt 
+--                     overStep = dt - (1 - volume venv) / (attackSlope venv)
+--                 in if nextVol <= 1.0 
+--                     then (nextVol,     venv {volume = nextVol}) 
+--                     else runState (stepEnv overStep) (venv { volume=1.0, currentState = EnvDecay})
+--   EnvDecay -> let nextVol = volume venv - (decaySlope venv) * dt 
+--                   overStep = dt - (volume venv - sustainLevel venv)/(decaySlope venv)
+--               in if nextVol >= (sustainLevel venv)
+--                   then (nextVol, venv {volume = nextVol})
+--                   else runState (stepEnv overStep) $
+--                         (venv { volume=sustainLevel venv, currentState = EnvSustain})        
+--   EnvSustain -> (volume venv, venv) -- sustain, nothing changes
+--   EnvRelease -> let nextVol = (volume venv) - (releaseSlope venv) * dt 
+--                 in if nextVol >= 0
+--                     then (nextVol, venv {volume = nextVol})
+--                     else (0.0, venv {currentState = EnvDone})
+--   EnvDone -> (0, venv) -- stopped, ready for GC
 
 
 
@@ -193,23 +163,13 @@ stepVoice dt = pairStatesWith (*) (stepOsc dt) (stepEnv dt)
 
 
 -- #TODO should voice have NoteNumber, so this takes note number and does nothign if they don't match?
--- noteOffVoice1 :: State Voice ()
--- noteOffVoice1 = pairStatesWith const idState (modify noteOffEnv)
--- noteOffVoice1 :: Voice -> Voice
--- noteOffVoice1 = second noteOffEnv
--- SHOLDN'T be called noteOff when there's no reference to NoteNuber in the Voice type
 releaseVoice :: Voice -> Voice
 releaseVoice = second noteOffEnv
 
--- restartVoice :: State Voice ()
--- restartVoice = pairStatesWith const idState (modify restartEnv)
 restartVoice :: Voice -> Voice
 restartVoice = second restartEnv
 
-
--- for synth :: ([voice], [notenumber])
-
--- #TODO is it okay to just sym the synths?  Could do some sort of compression on output
+-- #TODO is it okay to just sum the synths?  Could do some sort of compression on output
 stepSynth :: Seconds -> State VoicedSynth Pulse
 stepSynth dt = state $ \(voices, notes) ->  
     let (pulses, steppedVoices) = runState (stateMap $ stepVoice dt) voices
@@ -218,11 +178,6 @@ stepSynth dt = state $ \(voices, notes) ->
         running = ((<EnvDone) . currentState . snd . fst) 
         states' = unzip $ filter running $ zip steppedVoices notes
     in (sum pulses, states')
-
--- #TODO is ([Voice], [MidiNote]) the best way to keep track of which note each voice corresponds?
---          need to know in order to handle NoteOff        
---  instead of [Voice] have map MidiNote -> Voice?
---  Voice could include its MidiNote?
 
 restartVoices :: NoteNumber -> ([Voice], [NoteNumber]) -> ([Voice], [NoteNumber])
 restartVoices note (voices, notes) = unzip $ mapWhere 
@@ -310,7 +265,7 @@ printSong = putStrLn $ concatMap ((++" ") . show) $ zip scaleDegrees freqs
         freqs = map ionian19TET scaleDegrees
 
 output :: [Pulse]
-output = fst $ runState (synthesiseMidi testSeq2) ([], [])
+output = map ((max (-1.0)) . (min 1.0)) $ fst $ runState (synthesiseMidi testSeq2) ([], [])
 -- output = silentNightFull thiccIonian
 -- output = performSequence defaultSynth dorian tonalCenter jump
 -- output = performSequence defaultSynth ionian tonalCenter silentNight
@@ -319,40 +274,6 @@ output = fst $ runState (synthesiseMidi testSeq2) ([], [])
 -- output = silentNightFull locrian
 -- output = jumpFull phrygian
 -- output = performSequence pureSynth ionian tonalCenter silentNightChords
-
-
-silentNightFull :: Scale -> [Pulse]
-silentNightFull modality = map (/3) $ addSounds bassline $ addSounds melody chords 
-    where
-        chords = map (*2) $ performSequence (freqFromPitch tonalCenter) pureSynth modality silentNightChords
-        melody = performSequence (freqFromPitch tonalCenter) sawSynth modality silentNightMelody
-        bassline = performSequence (freqFromPitch tonalCenter) squareSynth modality silentNightBassline
-
-silentNightFullTET :: Scale -> [Pulse]
-silentNightFullTET modality = map (/3) $ addSounds bassline $ addSounds melody chords 
-    where
-        -- #TODO reference frequency always 440, doesn't really make sense
-        chords = map (*2) $ performSequenceTET (freqFromPitch tonalCenter) pureSynth modality silentNightChords
-        melody = performSequenceTET (freqFromPitch tonalCenter) sawSynth modality silentNightMelody
-        bassline = performSequenceTET (freqFromPitch tonalCenter) squareSynth modality silentNightBassline
-
-jumpFull :: Scale -> [Pulse]
-jumpFull modality = map (/2) $ addSounds bassline chords
-    where
-        bassline = performSequence (freqFromPitch tonalCenter) squareSynth modality jumpBassline
-        chords = performSequence (freqFromPitch tonalCenter) sawSynth modality jump
-
-
-jumpTour :: [Pulse]
-jumpTour = mconcat $ map (\scale -> performSequence (freqFromPitch tonalCenter) defaultSynth scale jump) modes
-    where 
-        modes =  [ionian, dorian, phrygian, lydian, mixolydian, aeolian, locrian]
-
-
-jumpTour2 :: [Pulse]
-jumpTour2 = mconcat $ map (\scale -> performSequence (freqFromPitch tonalCenter) defaultSynth scale jump) modes
-    where
-        modes = [lydian, ionian, mixolydian, dorian, aeolian, phrygian, locrian]
 
 
 save :: IO()

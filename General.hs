@@ -1,6 +1,6 @@
 module General where
 
-
+type Volume = Float
 type Seconds = Float
 type SamplesPerSecond = Float
 type Hz = Float
@@ -18,6 +18,8 @@ type Scale = ScaleDegree -> Hz
 type Envelope = Velocity -> Seconds -> [Pulse] -> [Pulse]
 type Sequence = [([ScaleDegree], Seconds)]
 
+addSounds :: [Pulse] -> [Pulse] -> [Pulse]
+addSounds = zipWith (+)
 
 -- #TODO make this less hardcoded
 sampleRate :: SamplesPerSecond
