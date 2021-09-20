@@ -144,8 +144,6 @@ noteOffEnv :: VolEnv -> VolEnv
 noteOffEnv venv = venv {currentState=EnvRelease}
 
 
-
-
 stepEnv :: Seconds -> State VolEnv Volume
 stepEnv dt = do
   venv <- get
@@ -155,26 +153,6 @@ stepEnv dt = do
     then (put $ venv {volume = nextVol}) >> return nextVol
          -- in state $ \venv -> (nextVol, venv {volume = nextVol})
     else withState toNextSegment $ stepEnv (dt - timeToSegmentTarget venv)
-                -- stepEnv :: Seconds -> State VolEnv Volume
-                -- stepEnv dt = state $ \venv -> case currentState venv of
-                --   -- #TODO what if attackSlope is 0
-                --   EnvAttack ->  let nextVol = volume venv + (attackSlope venv) * dt 
-                --                     overStep = dt - (1 - volume venv) / (attackSlope venv)
-                --                 in if nextVol <= 1.0 
-                --                     then (nextVol,     venv {volume = nextVol}) 
-                --                     else runState (stepEnv overStep) (venv { volume=1.0, currentState = EnvDecay})
-                --   EnvDecay -> let nextVol = volume venv - (decaySlope venv) * dt 
-                --                   overStep = dt - (volume venv - sustainLevel venv)/(decaySlope venv)
-                --               in if nextVol >= (sustainLevel venv)
-                --                   then (nextVol, venv {volume = nextVol})
-                --                   else runState (stepEnv overStep) $
-                --                         (venv { volume=sustainLevel venv, currentState = EnvSustain})        
-                --   EnvSustain -> (volume venv, venv) -- sustain, nothing changes
-                --   EnvRelease -> let nextVol = (volume venv) - (releaseSlope venv) * dt 
-                --                 in if nextVol >= 0
-                --                     then (nextVol, venv {volume = nextVol})
-                --                     else (0.0, venv {currentState = EnvDone})
-                --   EnvDone -> (0, venv) -- stopped, ready for GC
 
 
 runEnv :: Int -> Seconds -> State VolEnv [Volume]
@@ -215,10 +193,6 @@ restartVoice = second restartEnv
 -- fmap sum $ firstState (stateMap $ stepVoice dt) :: State ([Voice], a) Pulse
 stepSynthVoices :: Seconds -> State VoicedSynth Pulse
 stepSynthVoices dt = fmap sum $ firstState (stateMap $ stepVoice dt)
-      -- stepSynthVoices :: Seconds -> State VoicedSynth Pulse
-      -- stepSynthVoices dt = state $ \(voices, notes) ->  
-      --     let (pulses, steppedVoices) = runState (stateMap $ stepVoice dt) voices
-      --     in (sum pulses, (steppedVoices, notes))
 
 -- runVoice n dt :: State Voice [Pulse for each sample]
 -- stateMap $ runVoice n dt :: State [Voice] [[Pulse foreach sample] foreach voice]
@@ -246,42 +220,21 @@ stepSynth dt = do
   output <- stepSynthVoices dt
   cullSynthVoices
   return output
-      -- stepSynth :: Seconds -> State VoicedSynth Pulse
-      -- stepSynth dt = state $ \(voices, notes) ->  
-      --     let (pulses, steppedVoices) = runState (stateMap $ stepVoice dt) voices
-      --         -- running :: (Voice, NoteNumber) -> Boolean
-      --         -- running :: ((Oscillator, VolEnv), NoteNumber) -> Boolean
-      --         running = ((<EnvDone) . currentState . snd . fst) 
-      --         states' = unzip $ filter running $ zip steppedVoices notes
-      --     in (sum pulses, states')
-
 
 -- #TODO handle midi timing with fractional samples
-runSynth = runSynthOld
-
 -- Chunks the timestep into at most 1 second long chunks
 --    this helps when voices end early,
 --    as they're only culled once per call to runSynthSteps
 --    and leaving them in the EnvDone state will waste time calculating zeros
 -- #TODO could the EnvDone state be signalled somehow to automate the culling?
-runSynthNew :: Seconds -> State VoicedSynth [Pulse]
-runSynthNew dt | dt < (1.0/sampleRate) = return []
+runSynth :: Seconds -> State VoicedSynth [Pulse]
+runSynth dt | dt < (1.0/sampleRate) = return []
                | dt > 1.0 = do 
                   firstSec <- runSynthSteps (floor sampleRate) (1.0/sampleRate)
-                  remainder <- runSynthNew (dt - 1.0)
+                  remainder <- runSynth (dt - 1.0)
                   return $ firstSec ++ remainder
                | otherwise = let n = floor $ dt*sampleRate
                           in runSynthSteps n (1.0/sampleRate)
--- runSynthNew dt | dt < (1.0/sampleRate) = return []
---             | otherwise = let n = floor $ dt*sampleRate
---                           in runSynthSteps n (1.0/sampleRate)
-
-runSynthOld :: Seconds -> State VoicedSynth [Pulse]
-runSynthOld dt | dt < (1.0/sampleRate) = return []
-             | otherwise = do 
-                  pulse <- stepSynth (1.0/sampleRate)
-                  pulses <- runSynthOld (dt - (1.0/sampleRate))
-                  return (pulse:pulses)
 
 runSynthSteps :: Int -> Seconds -> State VoicedSynth [Pulse]
 runSynthSteps n dt = do
