@@ -1,5 +1,7 @@
-{-# LANGUAGE TemplateHaskell #-}
-
+{-# LANGUAGE FunctionalDependencies
+           , MultiParamTypeClasses
+           , TemplateHaskell
+  #-}
 import Prelude hiding (unzip)
 import qualified Data.ByteString.Lazy as B
 import qualified Data.ByteString.Builder as B
@@ -94,12 +96,11 @@ timestepWithinSegment venv dt = case _currentState venv of
 -- #TODO a voice should be allowed to mix multiple oscillators... 
 --  constructing a VoicedSynth should take a voice constructor :: Note -> Voice
 --  then we could replace Oscillator with [Oscillator]
--- data Voice = {
---   _voiceOsc :: Oscillator, 
---   _voiceVenv :: VolEnv
--- }
--- makeFields ''Voice
-type Voice = (Oscillator, VolEnv)
+data Voice = Voice {
+  _voiceOsc :: Oscillator, 
+  _voiceVenv :: VolEnv
+}
+-- type Voice = (Oscillator, VolEnv)
 
 -- #TODO should maybe be called an instrument / sequencer 
 --  VoicedSynth should include LFOs
@@ -120,24 +121,31 @@ type FullSynth = (VoicedSynth, FilterState, Filter)
 
 makeLenses ''Oscillator
 makeLenses ''VolEnv
+makeFields ''Voice
 
 -- env :: Envelope
 -- env = adsr (sq/8) (sq/2) 0.6 (sq/10)
 -- sq = 60.0/tempo/4.0
 -- #TODO un-hardcode the oscillator type and ADSR values
 voiceFromNote :: NoteNumber -> Voice
-voiceFromNote note = defaultVoice & _1 . freq .~ (hzFromNoteNumber note)
+voiceFromNote note = defaultVoice & osc . freq .~ (hzFromNoteNumber note)
 -- voiceFromNote note = set (_1.freq) (hzFromNoteNumber note) defaultVoice
 -- voiceFromNote note = over _1 (\osc -> osc{_freq = hzFromNoteNumber note}) defaultVoice
 
 defaultVoice :: Voice
-defaultVoice = (Oscillator {_wave=sawTone, _phase=0.0, _freq=1.0},
-                VolEnv {_attackSlope=2, _decaySlope=1, _sustainLevel=0.6, _releaseSlope=1,
-                        _currentState=EnvAttack, _volume=0})
+defaultVoice = Voice {
+    _voiceOsc = Oscillator {
+        _wave=sawTone, _phase=0.0, _freq=1.0
+    },
+    _voiceVenv = VolEnv {
+        _attackSlope=2, _decaySlope=1, _sustainLevel=0.6, 
+        _releaseSlope=1, _currentState=EnvAttack, _volume=0
+    }
+}
 
 stepOsc :: Seconds -> State Oscillator Pulse
-stepOsc dt = state $ \osc -> let newPhase = flip mod' 1.0 $ osc ^. phase + dt*(osc ^. freq)
-                              in ( (*0.1) $ osc ^. wave $ newPhase, osc & phase .~ newPhase)
+stepOsc dt = state $ \os -> let newPhase = flip mod' 1.0 $ os ^. phase + dt*(os ^. freq)
+                              in ( (*0.1) $ os ^. wave $ newPhase, os & phase .~ newPhase)
 
 -- should basically act like iterating stepOsc N times
 runOsc :: Int -> Seconds -> State Oscillator [Pulse]
@@ -185,20 +193,20 @@ runEnv n dt = do
 
 
 stepVoice :: Seconds -> State Voice Pulse
-stepVoice dt = joinStatesWith (*) (overState _1 $ stepOsc dt) (overState _2 $ stepEnv dt)
+stepVoice dt = joinStatesWith (*) (overState osc $ stepOsc dt) (overState venv $ stepEnv dt)
     -- stepVoice dt = pairStatesWith (*) (stepOsc dt) (stepEnv dt)
 
 runVoice :: Int -> Seconds -> State Voice [Pulse]
-runVoice n dt = joinStatesWith (zipWith (*)) (overState _1 $ runOsc n dt) (overState _2 $ runEnv n dt)
+runVoice n dt = joinStatesWith (zipWith (*)) (overState osc $ runOsc n dt) (overState venv $ runEnv n dt)
     -- runVoice n dt = pairStatesWith (zipWith (*)) (runOsc n dt) (runEnv n dt)
 
 
 -- #TODO should voice have NoteNumber, so this takes note number and does nothign if they don't match?
 releaseVoice :: Voice -> Voice
-releaseVoice = over _2 noteOffEnv
+releaseVoice = over venv noteOffEnv
 
 restartVoice :: Voice -> Voice
-restartVoice = over _2 restartEnv
+restartVoice = over venv restartEnv
 
 
 -- (stateMap $ stepVoice dt) :: State [Voice] [Pulse]
@@ -227,7 +235,7 @@ runSynthVoices n dt = do
 cullSynthVoices :: State VoicedSynth ()
 -- cullSynthVoices = let running = ((<EnvDone) . _currentState . snd . fst) 
 -- cullSynthVoices = let running = ((<EnvDone) . _currentState . (view (_1 . _2)) )
-cullSynthVoices = let running = views (_1 . _2) ((<EnvDone) . _currentState)
+cullSynthVoices = let running = views (_1 . venv) ((<EnvDone) . _currentState)
                   in modify (unzip . filter running . uncurry zip)
 
 -- -- #TODO At some point there should be explicit clipping.  Should it be here?
