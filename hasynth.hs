@@ -1,6 +1,7 @@
 {-# LANGUAGE FunctionalDependencies
            , MultiParamTypeClasses
            , TemplateHaskell
+           , TypeSynonymInstances
   #-}
 import Prelude hiding (unzip)
 import qualified Data.ByteString.Lazy as B
@@ -98,18 +99,15 @@ timestepWithinSegment venv dt = case _currentState venv of
 --  then we could replace Oscillator with [Oscillator]
 data Voice = Voice {
   _voiceOsc :: Oscillator, 
-  _voiceVenv :: VolEnv
+  _voiceVenv :: VolEnv,
+  _voiceNote :: NoteNumber
 }
 -- type Voice = (Oscillator, VolEnv)
 
 -- #TODO should maybe be called an instrument / sequencer 
 --  VoicedSynth should include LFOs
  -- should VoicedSynth include current time?
--- #TODO is ([Voice], [NoteNumber]) the best way to keep track of which note each voice corresponds?
---          need to know in order to handle NoteOff        
---  instead of [Voice] have map MidiNote -> Voice?
---  Voice could include its MidiNote?
-type VoicedSynth = ([Voice], [NoteNumber]) 
+type VoicedSynth = ([Voice]) 
 
 -- The state here probably doesn't need to be [Pulse]
 type FilterState = [Pulse]
@@ -128,7 +126,8 @@ makeFields ''Voice
 -- sq = 60.0/tempo/4.0
 -- #TODO un-hardcode the oscillator type and ADSR values
 voiceFromNote :: NoteNumber -> Voice
-voiceFromNote note = defaultVoice & osc . freq .~ (hzFromNoteNumber note)
+voiceFromNote noteNum = defaultVoice  & osc . freq .~ (hzFromNoteNumber noteNum)
+                                      & note .~ noteNum
 -- voiceFromNote note = set (_1.freq) (hzFromNoteNumber note) defaultVoice
 -- voiceFromNote note = over _1 (\osc -> osc{_freq = hzFromNoteNumber note}) defaultVoice
 
@@ -140,7 +139,8 @@ defaultVoice = Voice {
     _voiceVenv = VolEnv {
         _attackSlope=2, _decaySlope=1, _sustainLevel=0.6, 
         _releaseSlope=1, _currentState=EnvAttack, _volume=0
-    }
+    },
+    _voiceNote = 0
 }
 
 stepOsc :: Seconds -> State Oscillator Pulse
@@ -215,8 +215,10 @@ restartVoice = over venv restartEnv
 -- fmap sum :: State s [a] -> State s a
 -- fmap sum $ firstState (stateMap $ stepVoice dt) :: State ([Voice], a) Pulse
 stepSynthVoices :: Seconds -> State VoicedSynth Pulse
-stepSynthVoices dt = fmap sum $ overState _1 (stateMap $ stepVoice dt)
+stepSynthVoices dt = fmap sum $ stateMap $ stepVoice dt
 
+
+-- #TODO this isn't actually running, just iterating steps
 -- runVoice n dt :: State Voice [Pulse for each sample]
 -- stateMap $ runVoice n dt :: State [Voice] [[Pulse foreach sample] foreach voice]
 -- firstState $ stateMap $ runVoice n dt :: State ([Voice], a)  [[Pulse foreach sample] foreach voice]
@@ -235,8 +237,8 @@ runSynthVoices n dt = do
 cullSynthVoices :: State VoicedSynth ()
 -- cullSynthVoices = let running = ((<EnvDone) . _currentState . snd . fst) 
 -- cullSynthVoices = let running = ((<EnvDone) . _currentState . (view (_1 . _2)) )
-cullSynthVoices = let running = views (_1 . venv) ((<EnvDone) . _currentState)
-                  in modify (unzip . filter running . uncurry zip)
+cullSynthVoices = let running = views (venv . currentState) (<EnvDone)
+                  in modify (filter running)
 
 -- -- #TODO At some point there should be explicit clipping.  Should it be here?
 stepSynth :: Seconds -> State VoicedSynth Pulse
@@ -267,29 +269,39 @@ runSynthSteps n dt = do
   return output
 
 restartVoices :: NoteNumber -> VoicedSynth -> VoicedSynth
-restartVoices note (voices, notes) = unzip $ mapWhere 
-                                              ((==note) . snd) 
-                                              (first restartVoice) 
-                                              $ zip voices notes
+restartVoices noteNum voices = mapWhere ((==noteNum) . (view note)) 
+                                    restartVoice
+                                    voices
+-- restartVoices note (voices, notes) = unzip $ mapWhere 
+--                                               ((==note) . snd) 
+--                                               (first restartVoice) 
+--                                               $ zip voices notes
 releaseVoices :: NoteNumber -> VoicedSynth -> VoicedSynth
-releaseVoices note (voices, notes) = unzip $ mapWhere 
-                                              ((==note) . snd) 
-                                              (first releaseVoice) 
-                                              $ zip voices notes
+releaseVoices noteNum voices = mapWhere ((==noteNum) . (view note)) releaseVoice voices
+-- releaseVoices noteNum (voices, notes) = unzip $ mapWhere 
+--                                               ((==noteNum) . snd) 
+--                                               (first releaseVoice) 
+--                                               $ zip voices notes
 
 -- if there are any voices for that note, set the envelope to EnvAttack state
 --  otherwise add a new voice for the note
 noteOnSynth :: NoteNumber -> State VoicedSynth ()
-noteOnSynth note = modify $ \(voices, notes) -> 
-    if any (== note) notes
+noteOnSynth noteNum = modify $ \voices -> 
+    if any ((==noteNum) . (view note)) voices
       -- revert envelope to state 1
-      then restartVoices note (voices, notes)
+      then restartVoices noteNum voices
       -- add a new voice for that note
-      else ((voiceFromNote note):voices, note:notes)
+      else (voiceFromNote noteNum):voices
+-- noteOnSynth note = modify $ \(voices, notes) -> 
+--     if any (== note) notes
+--       -- revert envelope to state 1
+--       then restartVoices note (voices, notes)
+--       -- add a new voice for that note
+--       else ((voiceFromNote note):voices, note:notes)
 
 -- set the envelope of any voices with the corrseponding note to EnvRelease state
 noteOffSynth :: NoteNumber -> State VoicedSynth ()
-noteOffSynth note = modify $ releaseVoices note 
+noteOffSynth noteNum = modify $ releaseVoices noteNum 
 
 
 
@@ -397,7 +409,7 @@ testSeq2 = [ToyNoteOn 69 0, ToyNoteOn 73 0.5, ToyNoteOn 76 0.5, ToyNoteOn 81 0.5
             ToyNothing 50]
 
 defaultSynth :: FullSynth
-defaultSynth = (([], []), [], lowPass 800 (1/sampleRate))
+defaultSynth = (([]), [], lowPass 800 (1/sampleRate))
 
 
 -- =====================================================
