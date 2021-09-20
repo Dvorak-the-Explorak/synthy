@@ -52,6 +52,45 @@ data VolEnv = VolEnv {
         currentState :: EnvSegment,
         volume :: Volume
     }
+envSlope :: VolEnv -> Float
+envSlope venv = case currentState venv of
+  EnvAttack -> attackSlope venv
+  EnvDecay -> -(decaySlope venv)
+  EnvSustain -> 0.0
+  EnvRelease -> -(releaseSlope venv)
+  EnvDone -> 0.0
+stillInSegment :: VolEnv -> Float -> Bool
+stillInSegment venv x = case currentState venv of
+  EnvAttack -> (x <= 1.0)
+  EnvDecay -> (x >= (sustainLevel venv))
+  EnvSustain -> True
+  EnvRelease -> (x >= 0.0)
+  EnvDone -> True
+-- just jump to next segment.
+--  if volume hadn't reached the threshold for the next segment, just jump to it
+--    - should only be a small amount between samples
+toNextSegment :: VolEnv -> VolEnv
+toNextSegment venv = case currentState venv of
+  EnvAttack -> venv {volume = 1.0, currentState = EnvDecay}
+  EnvDecay -> venv {volume = sustainLevel venv, currentState = EnvSustain}
+  EnvSustain -> venv {currentState = EnvRelease}
+  EnvRelease -> venv {volume = 0.0, currentState = EnvDone}
+  EnvDone -> venv
+timeToSegmentTarget :: VolEnv -> Seconds
+timeToSegmentTarget venv = case currentState venv of
+  EnvAttack -> (1 - volume venv) / (attackSlope venv)
+  EnvDecay -> (volume venv - sustainLevel venv)/(decaySlope venv)
+  EnvSustain -> 0.0
+  EnvRelease -> (volume venv)/(releaseSlope venv)
+  EnvDone -> 0.0
+timestepWithinSegment :: VolEnv -> Seconds -> Bool
+timestepWithinSegment venv dt = case currentState venv of
+  EnvAttack -> dt <= (1 - volume venv) / (attackSlope venv)
+  EnvDecay -> dt <= (volume venv - sustainLevel venv)/(decaySlope venv)
+  EnvSustain -> True
+  EnvRelease -> dt <= (volume venv)/(releaseSlope venv)
+  EnvDone -> True
+
 
 -- #TODO a voice should be allowed to mix multiple oscillators... 
 --  constructing a VoicedSynth should take a voice constructor :: Note -> Voice
@@ -105,61 +144,58 @@ noteOffEnv :: VolEnv -> VolEnv
 noteOffEnv venv = venv {currentState=EnvRelease}
 
 
--- This still feels pretty messy
+
+
 stepEnv :: Seconds -> State VolEnv Volume
-stepEnv dt = state $ \venv -> case currentState venv of
-  -- #TODO what if attackSlope is 0
-  EnvAttack ->  let nextVol = volume venv + (attackSlope venv) * dt 
-                    overStep = dt - (1 - volume venv) / (attackSlope venv)
-                in if nextVol <= 1.0 
-                    then (nextVol,     venv {volume = nextVol}) 
-                    else runState (stepEnv overStep) (venv { volume=1.0, currentState = EnvDecay})
-  EnvDecay -> let nextVol = volume venv - (decaySlope venv) * dt 
-                  overStep = dt - (volume venv - sustainLevel venv)/(decaySlope venv)
-              in if nextVol >= (sustainLevel venv)
-                  then (nextVol, venv {volume = nextVol})
-                  else runState (stepEnv overStep) $
-                        (venv { volume=sustainLevel venv, currentState = EnvSustain})        
-  EnvSustain -> (volume venv, venv) -- sustain, nothing changes
-  EnvRelease -> let nextVol = (volume venv) - (releaseSlope venv) * dt 
-                in if nextVol >= 0
-                    then (nextVol, venv {volume = nextVol})
-                    else (0.0, venv {currentState = EnvDone})
-  EnvDone -> (0, venv) -- stopped, ready for GC
+stepEnv dt = do
+  venv <- get
+  let slope = envSlope venv
+  let nextVol = (dt*slope) + (volume venv)
+  if timestepWithinSegment venv dt
+    then (put $ venv {volume = nextVol}) >> return nextVol
+         -- in state $ \venv -> (nextVol, venv {volume = nextVol})
+    else withState toNextSegment $ stepEnv (dt - timeToSegmentTarget venv)
+                -- stepEnv :: Seconds -> State VolEnv Volume
+                -- stepEnv dt = state $ \venv -> case currentState venv of
+                --   -- #TODO what if attackSlope is 0
+                --   EnvAttack ->  let nextVol = volume venv + (attackSlope venv) * dt 
+                --                     overStep = dt - (1 - volume venv) / (attackSlope venv)
+                --                 in if nextVol <= 1.0 
+                --                     then (nextVol,     venv {volume = nextVol}) 
+                --                     else runState (stepEnv overStep) (venv { volume=1.0, currentState = EnvDecay})
+                --   EnvDecay -> let nextVol = volume venv - (decaySlope venv) * dt 
+                --                   overStep = dt - (volume venv - sustainLevel venv)/(decaySlope venv)
+                --               in if nextVol >= (sustainLevel venv)
+                --                   then (nextVol, venv {volume = nextVol})
+                --                   else runState (stepEnv overStep) $
+                --                         (venv { volume=sustainLevel venv, currentState = EnvSustain})        
+                --   EnvSustain -> (volume venv, venv) -- sustain, nothing changes
+                --   EnvRelease -> let nextVol = (volume venv) - (releaseSlope venv) * dt 
+                --                 in if nextVol >= 0
+                --                     then (nextVol, venv {volume = nextVol})
+                --                     else (0.0, venv {currentState = EnvDone})
+                --   EnvDone -> (0, venv) -- stopped, ready for GC
 
--- runEnv :: Int -> Seconds -> State VolEnv [Volume]
--- runEnv 0 dt = return []
--- runEnv n dt = state $ \venv -> case currentState venv of
---   EnvAttack ->  let steps = take n $ tail $ iterate (+dt) (volume venv)
---                     valid = takeWhile (<=1) steps
---                     oversteps = dropWhile (<=1) steps
---                     (moreSteps, state') = runState (runenv (length oversteps) dt) 
---                                             (venv {volume = last valid, currentState = EnvSustain})
---                 in if length oversteps == 0
---                     then (steps, venv {volume = last steps})
---                     else (valid ++ moreSteps, state')
---                     nextVol = volume venv + (attackSlope venv) * dt 
---                     overStep = dt - (1 - volume venv) / (attackSlope venv)
---                 in if nextVol <= 1.0 
---                     then (nextVol,     venv {volume = nextVol}) 
---                     else runState (stepEnv overStep) (venv { volume=1.0, currentState = EnvDecay})
---   EnvDecay -> let nextVol = volume venv - (decaySlope venv) * dt 
---                   overStep = dt - (volume venv - sustainLevel venv)/(decaySlope venv)
---               in if nextVol >= (sustainLevel venv)
---                   then (nextVol, venv {volume = nextVol})
---                   else runState (stepEnv overStep) $
---                         (venv { volume=sustainLevel venv, currentState = EnvSustain})        
---   EnvSustain -> (volume venv, venv) -- sustain, nothing changes
---   EnvRelease -> let nextVol = (volume venv) - (releaseSlope venv) * dt 
---                 in if nextVol >= 0
---                     then (nextVol, venv {volume = nextVol})
---                     else (0.0, venv {currentState = EnvDone})
---   EnvDone -> (0, venv) -- stopped, ready for GC
 
+runEnv :: Int -> Seconds -> State VolEnv [Volume]
+runEnv 0 dt = return []
+runEnv n dt = do
+  venv <- get
+  let slope = envSlope venv
+  let steps = take n $ tail $ iterate (+(dt*slope)) (volume venv)
+  let valid = takeWhile (stillInSegment venv) steps
+  nextSegmentSteps <- if length valid == n
+                        then (put $ venv {volume = last valid}) >> return []
+                        -- then state $ \venv -> ([], venv {volume = last valid})
+                        else withState toNextSegment $ runEnv (n - (length valid)) dt
+  return $ valid ++ nextSegmentSteps
 
 
 stepVoice :: Seconds -> State Voice Pulse
 stepVoice dt = pairStatesWith (*) (stepOsc dt) (stepEnv dt)
+
+runVoice :: Int -> Seconds -> State Voice [Pulse]
+runVoice n dt = pairStatesWith (zipWith (*)) (runOsc n dt) (runEnv n dt)
 
 
 -- #TODO should voice have NoteNumber, so this takes note number and does nothign if they don't match?
@@ -169,22 +205,96 @@ releaseVoice = second noteOffEnv
 restartVoice :: Voice -> Voice
 restartVoice = second restartEnv
 
--- #TODO is it okay to just sum the synths?  Could do some sort of compression on output
-stepSynth :: Seconds -> State VoicedSynth Pulse
-stepSynth dt = state $ \(voices, notes) ->  
-    let (pulses, steppedVoices) = runState (stateMap $ stepVoice dt) voices
-        -- running :: (Voice, NoteNumber) -> Boolean
-        -- running :: ((Oscillator, VolEnv), NoteNumber) -> Boolean
-        running = ((<EnvDone) . currentState . snd . fst) 
-        states' = unzip $ filter running $ zip steppedVoices notes
-    in (sum pulses, states')
 
-restartVoices :: NoteNumber -> ([Voice], [NoteNumber]) -> ([Voice], [NoteNumber])
+
+
+-- (stateMap $ stepVoice dt) :: State [Voice] [Pulse]
+-- firstState :: State s1 a -> State (s1,s2) a
+-- firstState (stateMap $ stepVoice dt) :: State ([Voice], a) [Pulse]
+-- fmap sum :: State s [a] -> State s a
+-- fmap sum $ firstState (stateMap $ stepVoice dt) :: State ([Voice], a) Pulse
+stepSynthVoices :: Seconds -> State VoicedSynth Pulse
+stepSynthVoices dt = fmap sum $ firstState (stateMap $ stepVoice dt)
+      -- stepSynthVoices :: Seconds -> State VoicedSynth Pulse
+      -- stepSynthVoices dt = state $ \(voices, notes) ->  
+      --     let (pulses, steppedVoices) = runState (stateMap $ stepVoice dt) voices
+      --     in (sum pulses, (steppedVoices, notes))
+
+-- runVoice n dt :: State Voice [Pulse for each sample]
+-- stateMap $ runVoice n dt :: State [Voice] [[Pulse foreach sample] foreach voice]
+-- firstState $ stateMap $ runVoice n dt :: State ([Voice], a)  [[Pulse foreach sample] foreach voice]
+-- fmap (map sum . transpose) $ firstState $ stateMap $ runVoice n dt :: State ([Voice], a)  [Pulse foreach sample (summed over voices)]
+runSynthVoices :: Int -> Seconds -> State VoicedSynth [Pulse]
+-- runSynthVoices n dt = fmap (map sum . transpose) $ firstState (stateMap $ runVoice n dt)
+runSynthVoices 0 dt = return []
+runSynthVoices n dt = do
+  pulse <- stepSynthVoices dt
+  pulses <- runSynthVoices (n-1) dt
+  return (pulse:pulses)
+
+
+-- running :: (Voice, NoteNumber) -> Boolean
+-- running :: ((Oscillator, VolEnv), NoteNumber) -> Boolean
+-- running ((osc, env), note) = currentState env < EnvDone
+cullSynthVoices :: State VoicedSynth ()
+cullSynthVoices = let running = ((<EnvDone) . currentState . snd . fst) 
+                  in modify  (unzip . filter running . uncurry zip)
+
+-- -- #TODO At some point there should be explicit clipping.  Should it be here?
+stepSynth :: Seconds -> State VoicedSynth Pulse
+stepSynth dt = do
+  output <- stepSynthVoices dt
+  cullSynthVoices
+  return output
+      -- stepSynth :: Seconds -> State VoicedSynth Pulse
+      -- stepSynth dt = state $ \(voices, notes) ->  
+      --     let (pulses, steppedVoices) = runState (stateMap $ stepVoice dt) voices
+      --         -- running :: (Voice, NoteNumber) -> Boolean
+      --         -- running :: ((Oscillator, VolEnv), NoteNumber) -> Boolean
+      --         running = ((<EnvDone) . currentState . snd . fst) 
+      --         states' = unzip $ filter running $ zip steppedVoices notes
+      --     in (sum pulses, states')
+
+
+-- #TODO handle midi timing with fractional samples
+runSynth = runSynthOld
+
+-- Chunks the timestep into at most 1 second long chunks
+--    this helps when voices end early,
+--    as they're only culled once per call to runSynthSteps
+--    and leaving them in the EnvDone state will waste time calculating zeros
+-- #TODO could the EnvDone state be signalled somehow to automate the culling?
+runSynthNew :: Seconds -> State VoicedSynth [Pulse]
+runSynthNew dt | dt < (1.0/sampleRate) = return []
+               | dt > 1.0 = do 
+                  firstSec <- runSynthSteps (floor sampleRate) (1.0/sampleRate)
+                  remainder <- runSynthNew (dt - 1.0)
+                  return $ firstSec ++ remainder
+               | otherwise = let n = floor $ dt*sampleRate
+                          in runSynthSteps n (1.0/sampleRate)
+-- runSynthNew dt | dt < (1.0/sampleRate) = return []
+--             | otherwise = let n = floor $ dt*sampleRate
+--                           in runSynthSteps n (1.0/sampleRate)
+
+runSynthOld :: Seconds -> State VoicedSynth [Pulse]
+runSynthOld dt | dt < (1.0/sampleRate) = return []
+             | otherwise = do 
+                  pulse <- stepSynth (1.0/sampleRate)
+                  pulses <- runSynthOld (dt - (1.0/sampleRate))
+                  return (pulse:pulses)
+
+runSynthSteps :: Int -> Seconds -> State VoicedSynth [Pulse]
+runSynthSteps n dt = do
+  output <- runSynthVoices n dt
+  cullSynthVoices
+  return output
+
+restartVoices :: NoteNumber -> VoicedSynth -> VoicedSynth
 restartVoices note (voices, notes) = unzip $ mapWhere 
                                               ((==note) . snd) 
                                               (first restartVoice) 
                                               $ zip voices notes
-releaseVoices :: NoteNumber -> ([Voice], [NoteNumber]) -> ([Voice], [NoteNumber])
+releaseVoices :: NoteNumber -> VoicedSynth -> VoicedSynth
 releaseVoices note (voices, notes) = unzip $ mapWhere 
                                               ((==note) . snd) 
                                               (first releaseVoice) 
@@ -204,16 +314,6 @@ noteOnSynth note = modify $ \(voices, notes) ->
 noteOffSynth :: NoteNumber -> State VoicedSynth ()
 noteOffSynth note = modify $ releaseVoices note 
 
-
--- #TODO give voices a "run" function 
---      so this doesn't have to step all the states for each sample
--- #TODO handle midi timing with fractional samples
-runSynth :: Seconds -> State VoicedSynth [Pulse]
-runSynth dt | dt < (1.0/sampleRate) = return []
-             | otherwise = do 
-                  pulse <- stepSynth (1.0/sampleRate)
-                  pulses <- runSynth (dt - (1.0/sampleRate))
-                  return (pulse:pulses)
 
 
 data ToyMidi = ToyNoteOn NoteNumber Seconds | ToyNoteOff NoteNumber Seconds | ToyNothing Seconds
@@ -243,7 +343,7 @@ testSeq1 = [ToyNoteOn 69 0, ToyNoteOff 69 5,
 testSeq2 :: [ToyMidi]
 testSeq2 = [ToyNoteOn 69 0, ToyNoteOn 73 0.5, ToyNoteOn 76 0.5, ToyNoteOn 81 0.5, 
             ToyNoteOff 69 2, ToyNoteOff 73 0, ToyNoteOff 76 0, ToyNoteOff 81 0,
-            ToyNothing 5]
+            ToyNothing 50]
 
 
 -- =====================================================
@@ -265,7 +365,7 @@ printSong = putStrLn $ concatMap ((++" ") . show) $ zip scaleDegrees freqs
         freqs = map ionian19TET scaleDegrees
 
 output :: [Pulse]
-output = map ((max (-1.0)) . (min 1.0)) $ fst $ runState (synthesiseMidi testSeq2) ([], [])
+output = map ((max (-1.0)) . (min 1.0)) $ evalState (synthesiseMidi testSeq2) ([], [])
 -- output = silentNightFull thiccIonian
 -- output = performSequence defaultSynth dorian tonalCenter jump
 -- output = performSequence defaultSynth ionian tonalCenter silentNight

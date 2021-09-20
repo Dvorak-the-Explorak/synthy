@@ -46,6 +46,16 @@ pairStatesWith f op1 op2 = state $ \s -> let
     s' = snd *** snd $ result
     in (out, s')
 
+firstState :: State s1 a -> State (s1,s2) a
+firstState op = state $ \(s1,s2) -> 
+    let (x, s1') = runState op s1
+    in (x, (s1', s2))
+
+secondState :: State s2 a -> State (s1,s2) a
+secondState op = state $ \(s1,s2) -> 
+    let (x, s2') = runState op s2
+    in (x, (s1, s2'))
+
 
 -- from Prelude or Data.List
 -- unzip :: [(a,b)] -> ([a], [b])
