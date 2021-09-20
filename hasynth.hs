@@ -1,3 +1,5 @@
+-- # LANGUAGE RankNTypes #
+
 import Prelude hiding (unzip)
 import qualified Data.ByteString.Lazy as B
 import qualified Data.ByteString.Builder as B
@@ -29,11 +31,6 @@ import DiatonicSequencer
 
 filename :: FilePath
 filename = "output.bin"
-
-
-
-
-
 
 
 
@@ -91,7 +88,7 @@ timestepWithinSegment venv dt = case currentState venv of
   EnvRelease -> dt <= (volume venv)/(releaseSlope venv)
   EnvDone -> True
 
-
+-- #TODO turn these `type` declarations into `data` declarations and lens it up boi
 -- #TODO a voice should be allowed to mix multiple oscillators... 
 --  constructing a VoicedSynth should take a voice constructor :: Note -> Voice
 --  then we could replace Oscillator with [Oscillator]
@@ -105,6 +102,13 @@ type Voice = (Oscillator, VolEnv)
 --  instead of [Voice] have map MidiNote -> Voice?
 --  Voice could include its MidiNote?
 type VoicedSynth = ([Voice], [NoteNumber]) 
+
+-- The state here probably doesn't need to be [Pulse]
+type FilterState = [Pulse]
+type Filter = Pulse -> State FilterState Pulse
+-- type FilterState = (a, a -> Pulse -> (a,Pulse))
+-- type FilterState = State a Pulse
+type FullSynth = (VoicedSynth, FilterState, Filter)
 
 
 -- env :: Envelope
@@ -142,7 +146,6 @@ restartEnv venv = venv { currentState = EnvAttack}
 -- jump to decay section of envelope
 noteOffEnv :: VolEnv -> VolEnv
 noteOffEnv venv = venv {currentState=EnvRelease}
-
 
 stepEnv :: Seconds -> State VolEnv Volume
 stepEnv dt = do
@@ -269,24 +272,95 @@ noteOffSynth note = modify $ releaseVoices note
 
 
 
+
+applySynthOp :: State VoicedSynth Pulse -> State FullSynth Pulse
+applySynthOp op = state $ \(synth, filtState, filt) -> 
+  let (pulse, synth') = runState op synth
+      (output, filtState') = runState (filt pulse) filtState
+  in (output, (synth', filtState', filt))
+mapFilter :: Filter -> [Pulse] -> State FilterState [Pulse]
+mapFilter filt [] = return []
+mapFilter filt (pulse:pulses) = do
+  firstFiltered <- filt pulse 
+  restFiltered <- mapFilter filt pulses
+  return $ firstFiltered:restFiltered
+applySynthOps :: State VoicedSynth [Pulse] -> State FullSynth [Pulse]
+applySynthOps op = state $ \(synth, filtState, filt) -> 
+  let (pulses, synth') = runState op synth
+      (output, filtState') = runState (mapFilter filt pulses) filtState
+  in (output, (synth', filtState', filt))
+applySynthMod :: State VoicedSynth () -> State FullSynth ()
+applySynthMod op = state $ \(synth, filtState, filt) -> 
+  let (pulses, synth') = runState op synth
+  in (pulses, (synth', filtState, filt))
+  
+
+
+
+stepFullSynth :: Seconds -> State FullSynth Pulse
+stepFullSynth dt = applySynthOp (stepSynth dt)
+
+runFullSynthSteps :: Int -> Seconds -> State FullSynth [Pulse]
+runFullSynthSteps n dt = applySynthOps $ runSynthSteps n dt
+runFullSynth :: Seconds -> State FullSynth [Pulse]
+runFullSynth dt = applySynthOps $ runSynth dt
+noteOnFullSynth :: NoteNumber -> State FullSynth ()
+noteOnFullSynth note = applySynthMod $ noteOnSynth note
+noteOffFullSynth :: NoteNumber -> State FullSynth ()
+noteOffFullSynth note = applySynthMod $ noteOffSynth note
+
+
+
+
 data ToyMidi = ToyNoteOn NoteNumber Seconds | ToyNoteOff NoteNumber Seconds | ToyNothing Seconds
 
 
-synthesiseMidi :: [ToyMidi] -> State VoicedSynth [Pulse]
-synthesiseMidi [] = return []
-synthesiseMidi ((ToyNoteOn note dt):mids) = do 
+synthesiseMidiVoiced :: [ToyMidi] -> State VoicedSynth [Pulse]
+synthesiseMidiVoiced [] = return []
+synthesiseMidiVoiced ((ToyNoteOn note dt):mids) = do 
   output <- runSynth dt
   noteOnSynth note
-  remainder <- synthesiseMidi mids
+  remainder <- synthesiseMidiVoiced mids
   return $ output ++ remainder
-synthesiseMidi ((ToyNoteOff note dt):mids) = do
+synthesiseMidiVoiced ((ToyNoteOff note dt):mids) = do
     output <- runSynth dt
     noteOffSynth note
-    remainder <- synthesiseMidi mids
+    remainder <- synthesiseMidiVoiced mids
     return $ output ++ remainder
-synthesiseMidi ((ToyNothing dt):mids) = do
+synthesiseMidiVoiced ((ToyNothing dt):mids) = do
     output <- runSynth dt
-    remainder <- synthesiseMidi mids
+    remainder <- synthesiseMidiVoiced mids
+    return $ output ++ remainder
+
+hashtagNoFilter :: Filter
+hashtagNoFilter = return
+
+lowPass :: Hz -> Seconds -> Filter
+lowPass freq dt = \pulse -> state $ \prevs -> 
+  -- pulse :: Pulse
+  -- prevs :: FilterState == [Pulse]
+  let rc = 1/(2*pi*freq)
+      alpha = dt / (rc + dt)
+      next = alpha*pulse +  (1-alpha) * (head prevs)
+  in if null prevs
+      then (pulse*alpha, [pulse*alpha])
+      else (next, [next])
+
+synthesiseMidiFullSynth :: [ToyMidi] -> State FullSynth [Pulse]
+synthesiseMidiFullSynth [] = return []
+synthesiseMidiFullSynth ((ToyNoteOn note dt):mids) = do 
+  output <- runFullSynth dt
+  noteOnFullSynth note
+  remainder <- synthesiseMidiFullSynth mids
+  return $ output ++ remainder
+synthesiseMidiFullSynth ((ToyNoteOff note dt):mids) = do
+    output <- runFullSynth dt
+    noteOffFullSynth note
+    remainder <- synthesiseMidiFullSynth mids
+    return $ output ++ remainder
+synthesiseMidiFullSynth ((ToyNothing dt):mids) = do
+    output <- runFullSynth dt
+    remainder <- synthesiseMidiFullSynth mids
     return $ output ++ remainder
 
 testSeq1 :: [ToyMidi]
@@ -297,6 +371,9 @@ testSeq2 :: [ToyMidi]
 testSeq2 = [ToyNoteOn 69 0, ToyNoteOn 73 0.5, ToyNoteOn 76 0.5, ToyNoteOn 81 0.5, 
             ToyNoteOff 69 2, ToyNoteOff 73 0, ToyNoteOff 76 0, ToyNoteOff 81 0,
             ToyNothing 50]
+
+defaultSynth :: FullSynth
+defaultSynth = (([], []), [], lowPass 800 (1/sampleRate))
 
 
 -- =====================================================
@@ -318,7 +395,8 @@ printSong = putStrLn $ concatMap ((++" ") . show) $ zip scaleDegrees freqs
         freqs = map ionian19TET scaleDegrees
 
 output :: [Pulse]
-output = map ((max (-1.0)) . (min 1.0)) $ evalState (synthesiseMidi testSeq2) ([], [])
+output = map ((max (-1.0)) . (min 1.0)) $ evalState (synthesiseMidiFullSynth testSeq2) defaultSynth
+-- output = map ((max (-1.0)) . (min 1.0)) $ evalState (synthesiseMidi testSeq2) ([], [])
 -- output = silentNightFull thiccIonian
 -- output = performSequence defaultSynth dorian tonalCenter jump
 -- output = performSequence defaultSynth ionian tonalCenter silentNight
