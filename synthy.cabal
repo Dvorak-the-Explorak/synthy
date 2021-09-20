@@ -29,11 +29,12 @@ executable synthy
     DiatonicSequencer
   -- other-extensions:
   build-depends:       
-    base >=4.14 && <4.15,
+    base >=4.12 && <4.15,
     extra >=1.7.10,
     bytestring,
     process,
     mtl,
-    utility-ht
+    utility-ht,
+    lens
   -- hs-source-dirs:
   default-language:    Haskell2010

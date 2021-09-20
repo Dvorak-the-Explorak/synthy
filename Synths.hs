@@ -10,11 +10,6 @@ type Waveform = Seconds -> Pulse
 type SynthGenerator = Waveform -> Synth
 
 
-defaultSynth :: Synth
--- synth = makePulsedSynth 0.8 pureTone
-defaultSynth = sawSynth 
--- synth = pureSynth
-
 pureSynth :: Synth
 pureSynth = makeSynth pureTone
 sawSynth :: Synth

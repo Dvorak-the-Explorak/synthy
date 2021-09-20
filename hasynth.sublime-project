@@ -2,7 +2,7 @@
 	"build_systems": [
 		{
 			"name": "Compile and Run",
-			"cmd": ["runhaskell", "hasynth.hs"],
+			"cmd": ["cabal", "new-run"],
 			"selector": "source.haskell"
 		}
 	],

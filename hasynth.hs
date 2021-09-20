@@ -11,6 +11,8 @@ import Data.Fixed
 import Data.Tuple.Extra
 import Control.Monad.State
 import Control.Functor.HT (unzip)
+import Control.Lens
+import Control.Lens.Tuple
 -- =========================
 import General
 import MidiStuff
@@ -141,11 +143,11 @@ runOsc n dt = do
 
 
 restartEnv :: VolEnv -> VolEnv
-restartEnv venv = venv { currentState = EnvAttack}
+restartEnv venv = venv { currentState = EnvAttack }
 
 -- jump to decay section of envelope
 noteOffEnv :: VolEnv -> VolEnv
-noteOffEnv venv = venv {currentState=EnvRelease}
+noteOffEnv venv = venv { currentState = EnvRelease }
 
 stepEnv :: Seconds -> State VolEnv Volume
 stepEnv dt = do
@@ -173,20 +175,20 @@ runEnv n dt = do
 
 
 stepVoice :: Seconds -> State Voice Pulse
-stepVoice dt = pairStatesWith (*) (stepOsc dt) (stepEnv dt)
+stepVoice dt = joinStatesWith (*) (overState _1 $ stepOsc dt) (overState _2 $ stepEnv dt)
+    -- stepVoice dt = pairStatesWith (*) (stepOsc dt) (stepEnv dt)
 
 runVoice :: Int -> Seconds -> State Voice [Pulse]
-runVoice n dt = pairStatesWith (zipWith (*)) (runOsc n dt) (runEnv n dt)
+runVoice n dt = joinStatesWith (zipWith (*)) (overState _1 $ runOsc n dt) (overState _2 $ runEnv n dt)
+    -- runVoice n dt = pairStatesWith (zipWith (*)) (runOsc n dt) (runEnv n dt)
 
 
 -- #TODO should voice have NoteNumber, so this takes note number and does nothign if they don't match?
 releaseVoice :: Voice -> Voice
-releaseVoice = second noteOffEnv
+releaseVoice = over _2 noteOffEnv
 
 restartVoice :: Voice -> Voice
-restartVoice = second restartEnv
-
-
+restartVoice = over _2 restartEnv
 
 
 -- (stateMap $ stepVoice dt) :: State [Voice] [Pulse]
@@ -195,14 +197,13 @@ restartVoice = second restartEnv
 -- fmap sum :: State s [a] -> State s a
 -- fmap sum $ firstState (stateMap $ stepVoice dt) :: State ([Voice], a) Pulse
 stepSynthVoices :: Seconds -> State VoicedSynth Pulse
-stepSynthVoices dt = fmap sum $ firstState (stateMap $ stepVoice dt)
+stepSynthVoices dt = fmap sum $ overState _1 (stateMap $ stepVoice dt)
 
 -- runVoice n dt :: State Voice [Pulse for each sample]
 -- stateMap $ runVoice n dt :: State [Voice] [[Pulse foreach sample] foreach voice]
 -- firstState $ stateMap $ runVoice n dt :: State ([Voice], a)  [[Pulse foreach sample] foreach voice]
 -- fmap (map sum . transpose) $ firstState $ stateMap $ runVoice n dt :: State ([Voice], a)  [Pulse foreach sample (summed over voices)]
 runSynthVoices :: Int -> Seconds -> State VoicedSynth [Pulse]
--- runSynthVoices n dt = fmap (map sum . transpose) $ firstState (stateMap $ runVoice n dt)
 runSynthVoices 0 dt = return []
 runSynthVoices n dt = do
   pulse <- stepSynthVoices dt
@@ -214,8 +215,10 @@ runSynthVoices n dt = do
 -- running :: ((Oscillator, VolEnv), NoteNumber) -> Boolean
 -- running ((osc, env), note) = currentState env < EnvDone
 cullSynthVoices :: State VoicedSynth ()
-cullSynthVoices = let running = ((<EnvDone) . currentState . snd . fst) 
-                  in modify  (unzip . filter running . uncurry zip)
+-- cullSynthVoices = let running = ((<EnvDone) . currentState . snd . fst) 
+-- cullSynthVoices = let running = ((<EnvDone) . currentState . (view (_1 . _2)) )
+cullSynthVoices = let running = views (_1 . _2) ((<EnvDone) . currentState)
+                  in modify (unzip . filter running . uncurry zip)
 
 -- -- #TODO At some point there should be explicit clipping.  Should it be here?
 stepSynth :: Seconds -> State VoicedSynth Pulse
@@ -285,16 +288,20 @@ mapFilter filt (pulse:pulses) = do
   restFiltered <- mapFilter filt pulses
   return $ firstFiltered:restFiltered
 applySynthOps :: State VoicedSynth [Pulse] -> State FullSynth [Pulse]
-applySynthOps op = state $ \(synth, filtState, filt) -> 
-  let (pulses, synth') = runState op synth
-      (output, filtState') = runState (mapFilter filt pulses) filtState
-  in (output, (synth', filtState', filt))
+applySynthOps op = do 
+  pulses <- overState _1 op
+  filt <- gets (view _3)
+  overState _2 (mapFilter filt pulses) 
+    -- applySynthOps op = state $ \(synth, filtState, filt) -> 
+    --   let (pulses, synth') = runState op synth
+    --       (output, filtState') = runState (mapFilter filt pulses) filtState
+    --   in (output, (synth', filtState', filt))
 applySynthMod :: State VoicedSynth () -> State FullSynth ()
-applySynthMod op = state $ \(synth, filtState, filt) -> 
-  let (pulses, synth') = runState op synth
-  in (pulses, (synth', filtState, filt))
-  
-
+applySynthMod = overState _1
+    -- applySynthMod :: State VoicedSynth () -> State FullSynth ()
+    -- applySynthMod op = state $ \(synth, filtState, filt) -> 
+    --   let (pulses, synth') = runState op synth
+    --   in (pulses, (synth', filtState, filt))
 
 
 stepFullSynth :: Seconds -> State FullSynth Pulse
@@ -313,7 +320,6 @@ noteOffFullSynth note = applySynthMod $ noteOffSynth note
 
 
 data ToyMidi = ToyNoteOn NoteNumber Seconds | ToyNoteOff NoteNumber Seconds | ToyNothing Seconds
-
 
 synthesiseMidiVoiced :: [ToyMidi] -> State VoicedSynth [Pulse]
 synthesiseMidiVoiced [] = return []
@@ -398,8 +404,8 @@ output :: [Pulse]
 output = map ((max (-1.0)) . (min 1.0)) $ evalState (synthesiseMidiFullSynth testSeq2) defaultSynth
 -- output = map ((max (-1.0)) . (min 1.0)) $ evalState (synthesiseMidi testSeq2) ([], [])
 -- output = silentNightFull thiccIonian
--- output = performSequence defaultSynth dorian tonalCenter jump
--- output = performSequence defaultSynth ionian tonalCenter silentNight
+-- output = performSequence sawSynth dorian tonalCenter jump
+-- output = performSequence sawSynth ionian tonalCenter silentNight
 -- output = jumpTour
 -- output = jumpTour2
 -- output = silentNightFull locrian

@@ -1,8 +1,6 @@
 module Test where
-
-import Control.Lens.Tuple
-
-main = putStrLn $ show $ first double ("hello", "world")
+import Control.Lens
+-- import Control.Lens.Tuple
 
 
 dupArg :: (a -> a -> b) -> (a -> b)
@@ -11,6 +9,7 @@ dupArg f x = f x x
 double :: String -> String
 double = dupArg (++)
 
-first :: (a -> c) -> (a, b) -> (c, b)
+-- make `first` (Data.Tuple.Extra) from lenses
+foirst :: (a -> c) -> (a, b) -> (c, b)
 -- first f (x,y) = (f x, y)
-first = over _1
+foirst = over _1

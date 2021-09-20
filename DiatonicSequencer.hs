@@ -109,13 +109,13 @@ jumpFull modality = map (/2) $ addSounds bassline chords
 
 
 jumpTour :: [Pulse]
-jumpTour = mconcat $ map (\scale -> performSequence (freqFromPitch tonalCenter) defaultSynth scale jump) modes
+jumpTour = mconcat $ map (\scale -> performSequence (freqFromPitch tonalCenter) sawSynth scale jump) modes
     where 
         modes =  [ionian, dorian, phrygian, lydian, mixolydian, aeolian, locrian]
 
 
 jumpTour2 :: [Pulse]
-jumpTour2 = mconcat $ map (\scale -> performSequence (freqFromPitch tonalCenter) defaultSynth scale jump) modes
+jumpTour2 = mconcat $ map (\scale -> performSequence (freqFromPitch tonalCenter) sawSynth scale jump) modes
     where
         modes = [lydian, ionian, mixolydian, dorian, aeolian, phrygian, locrian]
 
