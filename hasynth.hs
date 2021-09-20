@@ -1,4 +1,4 @@
--- # LANGUAGE RankNTypes #
+{-# LANGUAGE TemplateHaskell #-}
 
 import Prelude hiding (unzip)
 import qualified Data.ByteString.Lazy as B
@@ -37,63 +37,68 @@ filename = "output.bin"
 
 
 data Oscillator = Oscillator {
-    wave :: Waveform,
-    phase :: Phase,
-    freq :: Hz
+  _wave :: Waveform,
+  _phase :: Phase,
+  _freq :: Hz
 }
 data EnvSegment = EnvAttack | EnvDecay | EnvSustain | EnvRelease | EnvDone
   deriving (Eq, Ord, Enum)
 data VolEnv = VolEnv {
-        attackSlope :: Float,
-        decaySlope :: Float,
-        sustainLevel :: Float,
-        releaseSlope :: Float,
-        currentState :: EnvSegment,
-        volume :: Volume
-    }
+  _attackSlope :: Float,
+  _decaySlope :: Float,
+  _sustainLevel :: Float,
+  _releaseSlope :: Float,
+  _currentState :: EnvSegment,
+  _volume :: Volume
+}
 envSlope :: VolEnv -> Float
-envSlope venv = case currentState venv of
-  EnvAttack -> attackSlope venv
-  EnvDecay -> -(decaySlope venv)
+envSlope venv = case _currentState venv of
+  EnvAttack -> _attackSlope venv
+  EnvDecay -> -(_decaySlope venv)
   EnvSustain -> 0.0
-  EnvRelease -> -(releaseSlope venv)
+  EnvRelease -> -(_releaseSlope venv)
   EnvDone -> 0.0
 stillInSegment :: VolEnv -> Float -> Bool
-stillInSegment venv x = case currentState venv of
+stillInSegment venv x = case _currentState venv of
   EnvAttack -> (x <= 1.0)
-  EnvDecay -> (x >= (sustainLevel venv))
+  EnvDecay -> (x >= (_sustainLevel venv))
   EnvSustain -> True
   EnvRelease -> (x >= 0.0)
   EnvDone -> True
 -- just jump to next segment.
---  if volume hadn't reached the threshold for the next segment, just jump to it
+--  if _volume hadn't reached the threshold for the next segment, just jump to it
 --    - should only be a small amount between samples
 toNextSegment :: VolEnv -> VolEnv
-toNextSegment venv = case currentState venv of
-  EnvAttack -> venv {volume = 1.0, currentState = EnvDecay}
-  EnvDecay -> venv {volume = sustainLevel venv, currentState = EnvSustain}
-  EnvSustain -> venv {currentState = EnvRelease}
-  EnvRelease -> venv {volume = 0.0, currentState = EnvDone}
+toNextSegment venv = case _currentState venv of
+  EnvAttack -> venv {_volume = 1.0, _currentState = EnvDecay}
+  EnvDecay -> venv {_volume = _sustainLevel venv, _currentState = EnvSustain}
+  EnvSustain -> venv {_currentState = EnvRelease}
+  EnvRelease -> venv {_volume = 0.0, _currentState = EnvDone}
   EnvDone -> venv
 timeToSegmentTarget :: VolEnv -> Seconds
-timeToSegmentTarget venv = case currentState venv of
-  EnvAttack -> (1 - volume venv) / (attackSlope venv)
-  EnvDecay -> (volume venv - sustainLevel venv)/(decaySlope venv)
+timeToSegmentTarget venv = case _currentState venv of
+  EnvAttack -> (1 - _volume venv) / (_attackSlope venv)
+  EnvDecay -> (_volume venv - _sustainLevel venv)/(_decaySlope venv)
   EnvSustain -> 0.0
-  EnvRelease -> (volume venv)/(releaseSlope venv)
+  EnvRelease -> (_volume venv)/(_releaseSlope venv)
   EnvDone -> 0.0
 timestepWithinSegment :: VolEnv -> Seconds -> Bool
-timestepWithinSegment venv dt = case currentState venv of
-  EnvAttack -> dt <= (1 - volume venv) / (attackSlope venv)
-  EnvDecay -> dt <= (volume venv - sustainLevel venv)/(decaySlope venv)
+timestepWithinSegment venv dt = case _currentState venv of
+  EnvAttack -> dt <= (1 - _volume venv) / (_attackSlope venv)
+  EnvDecay -> dt <= (_volume venv - _sustainLevel venv)/(_decaySlope venv)
   EnvSustain -> True
-  EnvRelease -> dt <= (volume venv)/(releaseSlope venv)
+  EnvRelease -> dt <= (_volume venv)/(_releaseSlope venv)
   EnvDone -> True
 
 -- #TODO turn these `type` declarations into `data` declarations and lens it up boi
 -- #TODO a voice should be allowed to mix multiple oscillators... 
 --  constructing a VoicedSynth should take a voice constructor :: Note -> Voice
 --  then we could replace Oscillator with [Oscillator]
+-- data Voice = {
+--   _voiceOsc :: Oscillator, 
+--   _voiceVenv :: VolEnv
+-- }
+-- makeFields ''Voice
 type Voice = (Oscillator, VolEnv)
 
 -- #TODO should maybe be called an instrument / sequencer 
@@ -113,50 +118,55 @@ type Filter = Pulse -> State FilterState Pulse
 type FullSynth = (VoicedSynth, FilterState, Filter)
 
 
+makeLenses ''Oscillator
+makeLenses ''VolEnv
+
 -- env :: Envelope
 -- env = adsr (sq/8) (sq/2) 0.6 (sq/10)
 -- sq = 60.0/tempo/4.0
 -- #TODO un-hardcode the oscillator type and ADSR values
 voiceFromNote :: NoteNumber -> Voice
-voiceFromNote note = first (\osc -> osc{freq = hzFromNoteNumber note}) defaultVoice
+voiceFromNote note = defaultVoice & _1 . freq .~ (hzFromNoteNumber note)
+-- voiceFromNote note = set (_1.freq) (hzFromNoteNumber note) defaultVoice
+-- voiceFromNote note = over _1 (\osc -> osc{_freq = hzFromNoteNumber note}) defaultVoice
 
 defaultVoice :: Voice
-defaultVoice = (Oscillator {wave=sawTone, phase=0.0, freq=1.0},
-                VolEnv {attackSlope=2, decaySlope=1, sustainLevel=0.6, releaseSlope=1,
-                        currentState=EnvAttack, volume=0})
+defaultVoice = (Oscillator {_wave=sawTone, _phase=0.0, _freq=1.0},
+                VolEnv {_attackSlope=2, _decaySlope=1, _sustainLevel=0.6, _releaseSlope=1,
+                        _currentState=EnvAttack, _volume=0})
 
 stepOsc :: Seconds -> State Oscillator Pulse
-stepOsc dt = state $ \osc -> let newPhase = flip mod' 1.0 $ phase osc + dt*(freq osc)
-                                in ( (*0.1) $ wave osc $ newPhase, osc {phase = newPhase})
+stepOsc dt = state $ \osc -> let newPhase = flip mod' 1.0 $ osc ^. phase + dt*(osc ^. freq)
+                              in ( (*0.1) $ osc ^. wave $ newPhase, osc & phase .~ newPhase)
 
 -- should basically act like iterating stepOsc N times
 runOsc :: Int -> Seconds -> State Oscillator [Pulse]
 runOsc 0 dt = return []
 runOsc n dt = do
   osc <- get
-  let nextPhase = flip mod' 1.0 $ (phase osc) + dt*(freq osc)*(fromIntegral n)
-  let phases = map (\i -> (dt*(freq osc)*(fromIntegral i)) + phase osc) [1..n]
-  let outputs = map (wave osc) $ phases
-  put $ osc {phase = nextPhase}
+  let nextPhase = flip mod' 1.0 $ (osc ^. phase) + dt*(osc ^. freq)*(fromIntegral n)
+  let phases = map (\i -> (dt*(osc ^. freq)*(fromIntegral i)) + osc ^. phase) [1..n]
+  let outputs = map (osc ^. wave) $ phases
+  put $ osc & phase .~ nextPhase
   return outputs
 
 
 
 restartEnv :: VolEnv -> VolEnv
-restartEnv venv = venv { currentState = EnvAttack }
+restartEnv venv = venv & currentState .~ EnvAttack
 
 -- jump to decay section of envelope
 noteOffEnv :: VolEnv -> VolEnv
-noteOffEnv venv = venv { currentState = EnvRelease }
+noteOffEnv venv = venv & currentState .~ EnvRelease
 
 stepEnv :: Seconds -> State VolEnv Volume
 stepEnv dt = do
   venv <- get
   let slope = envSlope venv
-  let nextVol = (dt*slope) + (volume venv)
+  let nextVol = (dt*slope) + (venv ^. volume)
   if timestepWithinSegment venv dt
-    then (put $ venv {volume = nextVol}) >> return nextVol
-         -- in state $ \venv -> (nextVol, venv {volume = nextVol})
+    then (put $ venv & volume .~ nextVol) >> return nextVol
+         -- in state $ \venv -> (nextVol, venv {_volume = nextVol})
     else withState toNextSegment $ stepEnv (dt - timeToSegmentTarget venv)
 
 
@@ -165,11 +175,11 @@ runEnv 0 dt = return []
 runEnv n dt = do
   venv <- get
   let slope = envSlope venv
-  let steps = take n $ tail $ iterate (+(dt*slope)) (volume venv)
+  let steps = take n $ tail $ iterate (+(dt*slope)) (venv ^. volume)
   let valid = takeWhile (stillInSegment venv) steps
   nextSegmentSteps <- if length valid == n
-                        then (put $ venv {volume = last valid}) >> return []
-                        -- then state $ \venv -> ([], venv {volume = last valid})
+                        then (put $ venv & volume .~ last valid) >> return []
+                        -- then state $ \venv -> ([], venv {_volume = last valid})
                         else withState toNextSegment $ runEnv (n - (length valid)) dt
   return $ valid ++ nextSegmentSteps
 
@@ -213,11 +223,11 @@ runSynthVoices n dt = do
 
 -- running :: (Voice, NoteNumber) -> Boolean
 -- running :: ((Oscillator, VolEnv), NoteNumber) -> Boolean
--- running ((osc, env), note) = currentState env < EnvDone
+-- running ((osc, env), note) = _currentState env < EnvDone
 cullSynthVoices :: State VoicedSynth ()
--- cullSynthVoices = let running = ((<EnvDone) . currentState . snd . fst) 
--- cullSynthVoices = let running = ((<EnvDone) . currentState . (view (_1 . _2)) )
-cullSynthVoices = let running = views (_1 . _2) ((<EnvDone) . currentState)
+-- cullSynthVoices = let running = ((<EnvDone) . _currentState . snd . fst) 
+-- cullSynthVoices = let running = ((<EnvDone) . _currentState . (view (_1 . _2)) )
+cullSynthVoices = let running = views (_1 . _2) ((<EnvDone) . _currentState)
                   in modify (unzip . filter running . uncurry zip)
 
 -- -- #TODO At some point there should be explicit clipping.  Should it be here?
