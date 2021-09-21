@@ -26,11 +26,6 @@ mapWhere p f = map (\x -> if (p x) then f x else x)
 -- State things
 -- ==================================
 
--- joinStatesWith :: (a -> b -> c) -> State s1 a -> State s2 b -> State (s1, s2) c
--- joinStatesWith f op1 op2 = state $ \(s1, s2) -> let
---     (out1, s1') = runState op1 s1
---     (out2, s2') = runState op2 s2
---     in (f out1 out2, (s1', s2'))
 
 idState :: State a ()
 idState = return ()
