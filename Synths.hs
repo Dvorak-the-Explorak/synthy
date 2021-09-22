@@ -9,7 +9,7 @@ module Synths where
 
 import General (Seconds, Pulse, sampleRate)
 import Voices (Voice(..), voiceFromNote, stepVoice, releaseVoice, restartVoice, note, venv)
-import Filters (Filter(..), Filter(..), lowPass, hashtagNoFilter, mapFilter, filtFunc, cutoff)
+import Filters (Filter(..), Filter(..), lowPass, highPass, hashtagNoFilter, mapFilter, filtFunc, cutoff)
 import Helpers (stateMap, overState, mapWhere)
 import MidiStuff (NoteNumber, ToyMidi(..))
 import Envelopes (VolEnv(..), EnvSegment(..), currentState)
@@ -201,7 +201,7 @@ synthesiseMidiFullSynth ((ToyNothing dt):mids) = do
 defaultSynth :: FullSynth
 defaultSynth = FullSynth {
   _fullSynthVoices = ([]), 
-  _fullSynthFilt = Filter {_prevOut =0, _cutoff = 800, _filtFunc = lowPass (1/sampleRate)},
+  _fullSynthFilt = Filter {_prevOut =0, _cutoff = 800, _filtFunc = highPass (1/sampleRate)},
   _fullSynthLfo = lfo1s & freq .~ 4,
   _fullSynthLfoStrength = 400 * 10
 }

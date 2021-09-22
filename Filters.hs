@@ -22,7 +22,7 @@ import General (Pulse, Hz, Volume, Seconds)
 -- }
 
 data Filter = Filter {
-  _prevOut ::Pulse, 
+  _prevOut :: Pulse, 
   _cutoff :: Hz,
   _filtFunc :: FilterFunc
 }
@@ -56,6 +56,19 @@ lowPass dt = (\pulse -> state $ \fs ->
         next = alpha*pulse +  (1-alpha) * prev
     in (next, fs & prevOut .~ next)
   )
+
+-- #TODO highPass needs prevOut AND prevIn, do some polymorphism magic
+highPass :: Seconds -> FilterFunc
+highPass dt = (\pulse -> state $ \fs -> 
+    let prev = fs ^. prevOut -- this is actually prevOut - prevIn
+        freq = fs ^. cutoff
+        rc = 1/(2*pi*freq)
+        alpha = rc / (rc + dt)
+        next = alpha*pulse +  alpha * prev
+    in (next, fs & prevOut .~ (next - pulse) ) 
+  )
+
+-- #TODO make filters composable?  want to have bandPass lo hi = highPass lo . lowPass hi 
 
 -- ===============================================
 
