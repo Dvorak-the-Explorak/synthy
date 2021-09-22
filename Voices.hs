@@ -38,6 +38,8 @@ makeFields ''Voice
 
 -- ========================================================================
 
+-- #TODO Note off needs to move the filterEnv as well
+
 
 -- #TODO un-hardcode the oscillator type and ADSR values
 voiceFromNote :: NoteNumber -> Voice

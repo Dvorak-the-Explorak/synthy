@@ -25,6 +25,7 @@ sawTone = \t -> 2 * (t `mod'` 1) - 1
 squareTone :: Waveform
 squareTone = (\t -> if (t `mod'` 1.0 < 0.5) then -1.0 else 1.0)
 
+
 -- ==========================================
 
 
@@ -32,6 +33,18 @@ data Oscillator = Oscillator {
   _wave :: Waveform,
   _phase :: Phase,
   _freq :: Hz
+}
+
+zeroOsc = Oscillator {
+  _wave = const 0,
+  _phase = 0,
+  _freq = 0
+}
+
+lfo1s = Oscillator {
+  _wave = pureTone,
+  _phase = 0,
+  _freq = 1
 }
 
 

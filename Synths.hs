@@ -1,25 +1,39 @@
-module Synths where
+{-# LANGUAGE FunctionalDependencies
+           , MultiParamTypeClasses
+           , TemplateHaskell
+           , TypeSynonymInstances
+           , FlexibleInstances
+  #-}
 
+module Synths where
 
 import General (Seconds, Pulse, sampleRate)
 import Voices (Voice(..), voiceFromNote, stepVoice, releaseVoice, restartVoice, note, venv)
-import Filters (Filter(..), Filter(..), hashtagNoFilter, mapFilter, filtFunc)
+import Filters (Filter(..), Filter(..), lowPass, hashtagNoFilter, mapFilter, filtFunc, cutoff)
 import Helpers (stateMap, overState, mapWhere)
 import MidiStuff (NoteNumber, ToyMidi(..))
 import Envelopes (VolEnv(..), EnvSegment(..), currentState)
+import Oscillators (Oscillator, zeroOsc, lfo1s, stepOsc, freq)
 
 import Control.Monad.State
 import Control.Lens
+import Debug.Trace
 
 -- #TODO should maybe be called an instrument / sequencer 
 --  VoicedSynth should include LFOs
  -- should VoicedSynth include current time?
 
 type VoicedSynth = ([Voice])
--- FullSynth is just a VoicedSynth with a global filter
-type FullSynth = (VoicedSynth, Filter)
 
+-- FullSynth is just a VoicedSynth with a global filter, modulated by LFO
+data FullSynth = FullSynth {
+  _fullSynthVoices :: VoicedSynth, 
+  _fullSynthFilt :: Filter,
+  _fullSynthLfo :: Oscillator,
+  _fullSynthLfoStrength :: Float
+}
 
+makeFields ''FullSynth
 
 stepSynthVoices :: Seconds -> State VoicedSynth Pulse
 stepSynthVoices dt = fmap sum $ stateMap $ stepVoice dt
@@ -98,36 +112,51 @@ defaultVoicedSynth = ([])
 
 -- ===================================================================================
 
-
-applySynthOp :: State VoicedSynth Pulse -> State FullSynth Pulse
-applySynthOp op = do
-  pulse <- overState _1 op
-  _filt <- gets (view $ _2.filtFunc)
-  overState _2 (_filt pulse)
-
-applySynthOps :: State VoicedSynth [Pulse] -> State FullSynth [Pulse]
-applySynthOps op = do 
-  pulses <- overState _1 op
-  _filt <- gets (view $ _2 . filtFunc)
-  overState _2 (mapFilter _filt pulses) 
-
-applySynthMod :: State VoicedSynth () -> State FullSynth ()
-applySynthMod = overState _1
-
 stepFullSynth :: Seconds -> State FullSynth Pulse
-stepFullSynth dt = applySynthOp (stepSynth dt)
+stepFullSynth dt  = do
+  -- step the VoicedSynth
+  pulse <- overState voices $ stepSynth dt
+  
+  -- run the LFO
+  -- #TODO Oh no I don't have dt in this function. Lets get rid of dt and leave it as a global constant?
+  moduland <- overState lfo $ stepOsc dt
+  strength <- gets (view lfoStrength)
+
+  -- modulate the filter cutoff with the LFO
+  modify $ over (filt.cutoff) (\x -> x+(moduland*strength))
+  -- get the filter
+  _filt <- gets (view $ filt . filtFunc)
+
+  -- run the filter to get the output
+  output <- overState filt $ _filt pulse
+
+  -- unmodulate the filter cutoff
+  modify $ over (filt.cutoff) (\x -> x-moduland*strength)
+
+  return output
 
 runFullSynthSteps :: Int -> Seconds -> State FullSynth [Pulse]
-runFullSynthSteps n dt = applySynthOps $ runSynthSteps n dt
+runFullSynthSteps 0 dt = return []
+runFullSynthSteps n dt = do
+  pulse <- stepFullSynth dt
+  pulses <- runFullSynthSteps (n-1) dt
+  return (pulse:pulses)
 
 runFullSynth :: Seconds -> State FullSynth [Pulse]
-runFullSynth dt = applySynthOps $ runSynth dt
+runFullSynth dt | dt < (1.0/sampleRate) = return []
+                | dt > 1.0 = do 
+                    firstSec <- runFullSynthSteps (floor sampleRate) (1.0/sampleRate)
+                    remainder <- runFullSynth (dt - 1.0)
+                    return $ firstSec ++ remainder
+                | otherwise = let n = floor $ dt*sampleRate
+                          in runFullSynthSteps n (1.0/sampleRate)
 
 noteOnFullSynth :: NoteNumber -> State FullSynth ()
-noteOnFullSynth note = applySynthMod $ noteOnSynth note
+noteOnFullSynth note = overState voices $ noteOnSynth note
 
 noteOffFullSynth :: NoteNumber -> State FullSynth ()
-noteOffFullSynth note = applySynthMod $ noteOffSynth note
+noteOffFullSynth note = overState voices $ noteOffSynth note
+
 
 -- ================================================================================
 
@@ -167,10 +196,14 @@ synthesiseMidiFullSynth ((ToyNothing dt):mids) = do
     return $ output ++ remainder
 
 
-
-
-
 -- ==============================================================================
 
 defaultSynth :: FullSynth
-defaultSynth = (([]), Filter {_prevOut =0, _cutoff = 800, _filtFunc = hashtagNoFilter})
+defaultSynth = FullSynth {
+  _fullSynthVoices = ([]), 
+  _fullSynthFilt = Filter {_prevOut =0, _cutoff = 800, _filtFunc = lowPass (1/sampleRate)},
+  _fullSynthLfo = lfo1s & freq .~ 4,
+  _fullSynthLfoStrength = 400 * 10
+}
+
+

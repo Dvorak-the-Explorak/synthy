@@ -42,7 +42,7 @@ filename = "output.bin"
 
 
 performMidi :: [ToyMidi] -> [Pulse]
-performMidi midi = evalState (synthesiseMidiVoicedSynth midi) defaultVoicedSynth
+performMidi midi = evalState (synthesiseMidiFullSynth midi) defaultSynth
 
 
 testSeq1 :: [ToyMidi]
