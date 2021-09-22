@@ -60,17 +60,23 @@ toNextSegment venv = case _currentState venv of
   EnvDone -> venv
 timeToSegmentTarget :: VolEnv -> Seconds
 timeToSegmentTarget venv = case _currentState venv of
-  EnvAttack -> (1 - _volume venv) / (_attackSlope venv)
-  EnvDecay -> (_volume venv - _sustainLevel venv)/(_decaySlope venv)
+  EnvAttack -> if _attackSlope venv > 0
+                then (1 - _volume venv) / (_attackSlope venv)
+                else 0
+  EnvDecay -> if _decaySlope venv > 0
+                then (_volume venv - _sustainLevel venv)/(_decaySlope venv)
+                else 0
   EnvSustain -> 0.0
-  EnvRelease -> (_volume venv)/(_releaseSlope venv)
+  EnvRelease -> if _releaseSlope venv > 0 
+                then (_volume venv)/(_releaseSlope venv)
+                else 0
   EnvDone -> 0.0
 timestepWithinSegment :: VolEnv -> Seconds -> Bool
 timestepWithinSegment venv dt = case _currentState venv of
-  EnvAttack -> dt <= (1 - _volume venv) / (_attackSlope venv)
-  EnvDecay -> dt <= (_volume venv - _sustainLevel venv)/(_decaySlope venv)
+  EnvAttack -> dt <= timeToSegmentTarget venv
+  EnvDecay -> dt <= timeToSegmentTarget venv
   EnvSustain -> True
-  EnvRelease -> dt <= (_volume venv)/(_releaseSlope venv)
+  EnvRelease -> dt <= timeToSegmentTarget venv
   EnvDone -> True
 
 restartEnv :: VolEnv -> VolEnv

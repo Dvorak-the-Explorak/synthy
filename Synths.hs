@@ -3,7 +3,7 @@ module Synths where
 
 import General (Seconds, Pulse, sampleRate)
 import Voices (Voice(..), voiceFromNote, stepVoice, releaseVoice, restartVoice, note, venv)
-import Filters (Filter(..), FilterState(..), hashtagNoFilter, runFilter, mapFilter)
+import Filters (Filter(..), Filter(..), hashtagNoFilter, mapFilter, filtFunc)
 import Helpers (stateMap, overState, mapWhere)
 import MidiStuff (NoteNumber, ToyMidi(..))
 import Envelopes (VolEnv(..), EnvSegment(..), currentState)
@@ -17,7 +17,7 @@ import Control.Lens
 
 type VoicedSynth = ([Voice])
 -- FullSynth is just a VoicedSynth with a global filter
-type FullSynth = (VoicedSynth, FilterState, Filter)
+type FullSynth = (VoicedSynth, Filter)
 
 
 
@@ -102,13 +102,13 @@ defaultVoicedSynth = ([])
 applySynthOp :: State VoicedSynth Pulse -> State FullSynth Pulse
 applySynthOp op = do
   pulse <- overState _1 op
-  _filt <- gets (view _3)
-  overState _2 (runFilter _filt pulse)
+  _filt <- gets (view $ _2.filtFunc)
+  overState _2 (_filt pulse)
 
 applySynthOps :: State VoicedSynth [Pulse] -> State FullSynth [Pulse]
 applySynthOps op = do 
   pulses <- overState _1 op
-  _filt <- gets (view _3)
+  _filt <- gets (view $ _2 . filtFunc)
   overState _2 (mapFilter _filt pulses) 
 
 applySynthMod :: State VoicedSynth () -> State FullSynth ()
@@ -173,4 +173,4 @@ synthesiseMidiFullSynth ((ToyNothing dt):mids) = do
 -- ==============================================================================
 
 defaultSynth :: FullSynth
-defaultSynth = (([]), FilterState {_prevOut =0, _cutoff = 800}, hashtagNoFilter)
+defaultSynth = (([]), Filter {_prevOut =0, _cutoff = 800, _filtFunc = hashtagNoFilter})

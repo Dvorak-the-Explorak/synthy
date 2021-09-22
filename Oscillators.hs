@@ -38,9 +38,13 @@ data Oscillator = Oscillator {
 -- makes the lenses, calls the lens for _wave just wave
 makeLenses ''Oscillator
 
+-- ============================================================
+
+
+
+
+
 -- ==============================================
-
-
 
 stepOsc :: Seconds -> State Oscillator Pulse
 stepOsc dt = state $ \os -> let newPhase = flip mod' 1.0 $ os ^. phase + dt*(os ^. freq)

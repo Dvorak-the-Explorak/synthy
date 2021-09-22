@@ -20,13 +20,15 @@ import General (Pulse, Hz, Volume, Seconds)
 --   state :: a,
 --   filt :: (Pulse -> State a Pulse)
 -- }
-data FilterState = FilterState {
+
+data Filter = Filter {
   _prevOut ::Pulse, 
-  _cutoff :: Hz
+  _cutoff :: Hz,
+  _filtFunc :: FilterFunc
 }
-newtype Filter = Filter (Pulse -> State FilterState Pulse)
-runFilter :: Filter -> Pulse -> State FilterState Pulse
-runFilter (Filter f) = f
+
+type FilterFunc = (Pulse -> State Filter Pulse)
+
 -- type FilterState = (a, a -> Pulse -> (a,Pulse))
 -- type FilterState = State a Pulse
 -- It's not actually a volume, but that's what the filter envelope outputs
@@ -36,17 +38,17 @@ runFiltEnvCurve (FiltEnvCurve f) = f
 
 
 -- makes the lenses, calls the lens for _prevOut just prevOut
-makeLenses ''FilterState
+makeLenses ''Filter
 
 -- ================================================================
 
 
 
-hashtagNoFilter :: Filter
-hashtagNoFilter = Filter $ return 
+hashtagNoFilter :: FilterFunc
+hashtagNoFilter = return 
 
-lowPass :: Seconds -> Filter
-lowPass dt = Filter (\pulse -> state $ \fs -> 
+lowPass :: Seconds -> FilterFunc
+lowPass dt = (\pulse -> state $ \fs -> 
     let prev = fs ^. prevOut
         freq = fs ^. cutoff
         rc = 1/(2*pi*freq)
@@ -58,9 +60,9 @@ lowPass dt = Filter (\pulse -> state $ \fs ->
 -- ===============================================
 
 
-mapFilter :: Filter -> [Pulse] -> State FilterState [Pulse]
+mapFilter :: FilterFunc -> [Pulse] -> State Filter [Pulse]
 mapFilter _filt [] = return []
 mapFilter _filt (pulse:pulses) = do
-  firstFiltered <- runFilter _filt pulse 
+  firstFiltered <- _filt pulse 
   restFiltered <- mapFilter _filt pulses
   return $ firstFiltered:restFiltered
