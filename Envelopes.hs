@@ -1,48 +1,112 @@
+{-# LANGUAGE FunctionalDependencies
+           , MultiParamTypeClasses
+           , TemplateHaskell
+           , TypeSynonymInstances
+  #-}
+
 module Envelopes where
 
-import General (Envelope, Seconds, Pulse, sampleRate)
-
--- ramp up/down time -> input -> output
-ar_envelope :: Seconds -> [Pulse] -> [Pulse]
-ar_envelope rampTime input = zipWith (*) envelope input
-    where
-        rampUp = map (min 1.0) $ iterate (+stepUp) 0.0
-        rampDown = reverse $ take (length input) rampUp
-        envelope = zipWith (*) rampUp rampDown
-
-        stepUp = 1.0/(rampTime * sampleRate)
-
--- Linear attack, decay and release
-adsr :: Seconds -> Seconds -> Pulse -> Seconds -> Envelope
-adsr attackTime decayTime susLevel releaseTime = \vel duration input -> 
-    let 
-        output = zipWith (*) env input
-
-        env = attack ++ decay ++ sustain ++ release ++ repeat 0.0
-
-        attack = if attackTime > 0 
-                then map (*attackStep) [0.0 .. vel/attackStep] 
-                else []
-        -- #TODO does [10..1] not work???
-        decay = if decayTime > 0 
-                then map (*decayStep) $ reverse [vel*susLevel/decayStep .. vel/decayStep] 
-                else []
+import Control.Monad.State
+import Control.Lens
 
 
-        -- #TODO what if duration is less than attack + decay
-        -- release won't start at sustain level
-        --  test this
-        decayStartLevel = if length attack + length decay < (floor $ duration*sampleRate)
-                            then susLevel*vel
-                            else (attack ++ decay) !! ((floor $ duration * sampleRate) - 1)
+import General (Volume, Seconds, Pulse, sampleRate)
 
-        sustain = replicate (max 0 $ (floor $ duration*sampleRate) - length attack - length decay) $ susLevel*vel
-        
-        release = if releaseTime > 0 
-                then map (*releaseStep) $ reverse [0.0 .. vel*susLevel/releaseStep]
-                else []
 
-        attackStep = 1.0/(attackTime * sampleRate)
-        decayStep = 1.0/(decayTime * sampleRate)
-        releaseStep = 1.0/(releaseTime * sampleRate)
-    in output
+
+
+data EnvSegment = EnvAttack | EnvDecay | EnvSustain | EnvRelease | EnvDone
+  deriving (Eq, Ord, Enum)
+data VolEnv = VolEnv {
+  _attackSlope :: Float,
+  _decaySlope :: Float,
+  _sustainLevel :: Float,
+  _releaseSlope :: Float,
+  _currentState :: EnvSegment,
+  _volume :: Volume
+}
+
+-- makes the lenses, calls the lens for _attackSlope just attackSlope
+makeLenses ''VolEnv
+
+-- =============================================================================
+-- ======================== Functions ==========================================
+-- =============================================================================
+
+
+envSlope :: VolEnv -> Float
+envSlope venv = case _currentState venv of
+  EnvAttack -> _attackSlope venv
+  EnvDecay -> -(_decaySlope venv)
+  EnvSustain -> 0.0
+  EnvRelease -> -(_releaseSlope venv)
+  EnvDone -> 0.0
+stillInSegment :: VolEnv -> Float -> Bool
+stillInSegment venv x = case _currentState venv of
+  EnvAttack -> (x <= 1.0)
+  EnvDecay -> (x >= (_sustainLevel venv))
+  EnvSustain -> True
+  EnvRelease -> (x >= 0.0)
+  EnvDone -> True
+-- just jump to next segment.
+--  if _volume hadn't reached the threshold for the next segment, just jump to it
+--    - should only be a small amount between samples
+toNextSegment :: VolEnv -> VolEnv
+toNextSegment venv = case _currentState venv of
+  EnvAttack -> venv {_volume = 1.0, _currentState = EnvDecay}
+  EnvDecay -> venv {_volume = _sustainLevel venv, _currentState = EnvSustain}
+  EnvSustain -> venv {_currentState = EnvRelease}
+  EnvRelease -> venv {_volume = 0.0, _currentState = EnvDone}
+  EnvDone -> venv
+timeToSegmentTarget :: VolEnv -> Seconds
+timeToSegmentTarget venv = case _currentState venv of
+  EnvAttack -> (1 - _volume venv) / (_attackSlope venv)
+  EnvDecay -> (_volume venv - _sustainLevel venv)/(_decaySlope venv)
+  EnvSustain -> 0.0
+  EnvRelease -> (_volume venv)/(_releaseSlope venv)
+  EnvDone -> 0.0
+timestepWithinSegment :: VolEnv -> Seconds -> Bool
+timestepWithinSegment venv dt = case _currentState venv of
+  EnvAttack -> dt <= (1 - _volume venv) / (_attackSlope venv)
+  EnvDecay -> dt <= (_volume venv - _sustainLevel venv)/(_decaySlope venv)
+  EnvSustain -> True
+  EnvRelease -> dt <= (_volume venv)/(_releaseSlope venv)
+  EnvDone -> True
+
+restartEnv :: VolEnv -> VolEnv
+restartEnv venv = venv & currentState .~ EnvAttack
+
+-- jump to decay section of envelope
+noteOffEnv :: VolEnv -> VolEnv
+noteOffEnv venv = venv & currentState .~ EnvRelease
+
+
+-- ================================================
+-- ============ State operations ==================
+-- ================================================
+
+
+-- Step the envelope one sample forward
+stepEnv :: Seconds -> State VolEnv Volume
+stepEnv dt = do
+  venv <- get
+  let slope = envSlope venv
+  let nextVol = (dt*slope) + (venv ^. volume)
+  if timestepWithinSegment venv dt
+    then (put $ venv & volume .~ nextVol) >> return nextVol
+         -- in state $ \venv -> (nextVol, venv {_volume = nextVol})
+    else withState toNextSegment $ stepEnv (dt - timeToSegmentTarget venv)
+
+-- Run the envelope N samples forward
+runEnv :: Int -> Seconds -> State VolEnv [Volume]
+runEnv 0 dt = return []
+runEnv n dt = do
+  venv <- get
+  let slope = envSlope venv
+  let steps = take n $ tail $ iterate (+(dt*slope)) (venv ^. volume)
+  let valid = takeWhile (stillInSegment venv) steps
+  nextSegmentSteps <- if length valid == n
+                        then (put $ venv & volume .~ last valid) >> return []
+                        -- then state $ \venv -> ([], venv {_volume = last valid})
+                        else withState toNextSegment $ runEnv (n - (length valid)) dt
+  return $ valid ++ nextSegmentSteps

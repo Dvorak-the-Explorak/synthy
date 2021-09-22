@@ -8,6 +8,10 @@ import Data.Tuple.Extra
 import Control.Functor.HT (unzip)
 import Control.Lens
 import Control.Lens.Lens
+
+
+import General (Pulse)
+
   
 rot :: Int -> [a] -> [a]
 rot _ [] = []
@@ -21,7 +25,8 @@ mapWhere p f = map (\x -> if (p x) then f x else x)
 (.:) :: (c -> d) -> (a -> b -> c) -> (a -> b -> d)
 (.:) = fmap . fmap
 
-
+hardClip :: Pulse -> Pulse
+hardClip = ((max (-1.0)) . (min 1.0))
 
 -- State things
 -- ==================================

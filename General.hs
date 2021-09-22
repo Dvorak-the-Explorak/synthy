@@ -10,12 +10,9 @@ type ScaleDegree = Int
 type Beats = Float
 type DutyCycle = Float
 type Velocity = Float
--- type Synth = Hz -> Seconds -> [Pulse]
--- -- type Oscillator = Seconds -> Pulse
--- type SynthGenerator = Oscillator -> Synth
 type Scale = ScaleDegree -> Hz
 -- Kinda don't like that the envelope acts on samples
-type Envelope = Velocity -> Seconds -> [Pulse] -> [Pulse]
+-- type Envelope = Velocity -> Seconds -> [Pulse] -> [Pulse]
 type Sequence = [([ScaleDegree], Seconds)]
 
 addSounds :: [Pulse] -> [Pulse] -> [Pulse]
