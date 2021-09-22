@@ -19,9 +19,7 @@ import Control.Monad.State
 import Control.Lens
 import Debug.Trace
 
--- #TODO should maybe be called an instrument / sequencer 
---  VoicedSynth should include LFOs
- -- should VoicedSynth include current time?
+import Codec.Midi
 
 type VoicedSynth = ([Voice])
 
@@ -54,7 +52,10 @@ runSynthVoices n dt = do
 
 cullSynthVoices :: State VoicedSynth ()
 cullSynthVoices = let running = views (venv . currentState) (<EnvDone)
-                  in modify (filter running)
+                  in do
+                    -- voices <- get
+                    -- trace (show $ concat $ map (show . view (venv.currentState)) voices) $ modify (filter running)
+                    modify (filter running)
 
 -- -- #TODO At some point there should be explicit clipping.  Should it be here?
 stepSynth :: Seconds -> State VoicedSynth Pulse
@@ -196,6 +197,26 @@ synthesiseMidiFullSynth ((ToyNothing dt):mids) = do
     return $ output ++ remainder
 
 
+synthesiseMidiTrack :: Track Ticks -> State FullSynth [Pulse]
+synthesiseMidiTrack [] = return []
+synthesiseMidiTrack ((ticks, NoteOn ch key vel):messages) = 
+  if vel == 0 
+    then synthesiseMidiTrack ((ticks, NoteOff ch key vel):messages)
+    else do 
+      output <- runFullSynthSteps ticks (1/sampleRate)
+      noteOnFullSynth key
+      voices <- gets (view voices)
+      remainder <- synthesiseMidiTrack messages
+      return $ output ++ remainder
+synthesiseMidiTrack ((ticks, NoteOff {key=key}):messages) = do
+    output <- runFullSynthSteps ticks (1/sampleRate)
+    noteOffFullSynth key 
+    remainder <- synthesiseMidiTrack messages
+    return $ output ++ remainder
+synthesiseMidiTrack ((ticks, message):messages) = do
+    output <- runFullSynthSteps ticks (1/sampleRate)
+    remainder <- synthesiseMidiTrack messages
+    return $ output ++ remainder
 -- ==============================================================================
 
 defaultSynth :: FullSynth

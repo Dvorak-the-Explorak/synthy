@@ -16,6 +16,9 @@ import Filters
 import Envelopes 
 import Helpers (overState, joinStatesWith)
 
+import Debug.Trace
+
+
 
 -- #TODO turn these `type` declarations into `data` declarations and lens it up boi
 -- #TODO a voice should be allowed to mix multiple oscillators... 
@@ -49,10 +52,10 @@ voiceFromNote noteNum = defaultVoice  & osc . freq .~ (hzFromNoteNumber noteNum)
 
 -- #TODO since voice has a NoteNumber, should this take note number and do nothing if they don't match?
 releaseVoice :: Voice -> Voice
-releaseVoice = over venv noteOffEnv
+releaseVoice = (over venv noteOffEnv) . (over filtEnv noteOffEnv)
 
 restartVoice :: Voice -> Voice
-restartVoice = over venv restartEnv
+restartVoice = (over venv restartEnv) . (over filtEnv restartEnv)
 
 -- #TODO default voice could be better thought through
 defaultVoice :: Voice

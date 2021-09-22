@@ -28,6 +28,8 @@ import Synths
 import Scales
 import Helpers
 import DiatonicSequencer
+import Codec.Midi
+import Codec.ByteString.Parser (runParser)
 -- import Debug.Trace
 
 -- #TODO play from MIDI file
@@ -41,8 +43,13 @@ filename :: FilePath
 filename = "output.bin"
 
 
-performMidi :: [ToyMidi] -> [Pulse]
-performMidi midi = evalState (synthesiseMidiFullSynth midi) defaultSynth
+performToyMidi :: [ToyMidi] -> [Pulse]
+performToyMidi midi = evalState (synthesiseMidiFullSynth midi) defaultSynth
+
+performMidi :: Track Ticks -> [Pulse]
+performMidi track = evalState (synthesiseMidiTrack track) defaultSynth
+
+
 
 
 testSeq1 :: [ToyMidi]
@@ -59,36 +66,49 @@ testSeq2 = [ToyNoteOn 69 0, ToyNoteOn 73 0.5, ToyNoteOn 76 0.5, ToyNoteOn 81 0.5
 -- =====================================================
 
 main = do
-    putStrLn $ printf "Playing song in %s" $ show tonalCenter 
-    play
-    -- printSong
-    putStrLn $ "made " ++ filename
 
--- B.floatLE is float little endian
-song = B.toLazyByteString $ mconcat $ map B.floatLE output
+  putStrLn $ printf "Playing something"
+  play
+  -- printSong
+  putStrLn $ "made " ++ filename
+
 
 printSong :: IO ()
 printSong = putStrLn $ concatMap ((++" ") . show) $ zip scaleDegrees freqs
-    where
-        scaleDegrees = [-7..21]
-        freqs = map ionian19TET scaleDegrees
+  where
+    scaleDegrees = [-7..21]
+    freqs = map ionian19TET scaleDegrees
 
-output :: [Pulse]
-output = map hardClip $ performMidi testSeq2
+-- B.floatLE is float little endian
+byteStringFromPulses :: [Pulse] -> B.ByteString
+byteStringFromPulses pulses = B.toLazyByteString $ mconcat $ map B.floatLE pulses
 
+save :: B.ByteString -> IO()
+save song = saveAs filename song
 
-
-save :: IO()
-save = saveAs filename
-
-saveAs :: FilePath -> IO()
-saveAs path = B.writeFile path song
+saveAs :: FilePath -> B.ByteString -> IO()
+saveAs path song = B.writeFile path song
 
 play :: IO ()
 play = do
-    save
-    -- runCommand :: String -> IO (processHandleOrSomething)
-    _ <- runCommand $ printf "ffplay -loglevel quiet -loop 1 -showmode 2 -f f32le -ar %f %s" sampleRate filename
-    return ()
+
+  something <- fmap (runParser parseMidi) $ B.readFile "c_major.mid"
+  case something of
+    (Left errorString) -> putStrLn errorString
+    (Right midi) -> do
+      putStrLn $ show $ timeDiv midi
+      mapM putStrLn $ map show $ head $ tracks midi 
+      -- mapM putStrLn $ map (show . length) $ tracks midi 
+
+      let firstTrack = head $ tracks midi
+
+      -- pulses = map hardClip $ performToyMidi testSeq2
+      -- #TODO interpret the midi TimeDiv and TempoChange messages to work out the time steps
+      let pulses = map hardClip $ performMidi $ map (first (*100)) firstTrack
+
+      save $ byteStringFromPulses pulses
+      -- runCommand :: String -> IO (processHandleOrSomething)
+      _ <- runCommand $ printf "ffplay -loglevel quiet -loop 1 -showmode 2 -f f32le -ar %f %s" sampleRate filename
+      return ()
 
 --ffmpeg -f f32le -ar 48000.0 -i output.bin output.mp3

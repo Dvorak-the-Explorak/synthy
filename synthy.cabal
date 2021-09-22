@@ -38,6 +38,7 @@ executable synthy
     process,
     mtl,
     utility-ht,
-    lens
+    lens,
+    HCodecs
   -- hs-source-dirs:
   default-language:    Haskell2010

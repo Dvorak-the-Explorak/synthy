@@ -11,6 +11,17 @@
   (major1) == 0 && (major2) == 1 && (minor) <= 0)
 #endif /* MIN_VERSION_synthy */
 
+/* package HCodecs-0.5.2 */
+#ifndef VERSION_HCodecs
+#define VERSION_HCodecs "0.5.2"
+#endif /* VERSION_HCodecs */
+#ifndef MIN_VERSION_HCodecs
+#define MIN_VERSION_HCodecs(major1,major2,minor) (\
+  (major1) <  0 || \
+  (major1) == 0 && (major2) <  5 || \
+  (major1) == 0 && (major2) == 5 && (minor) <= 2)
+#endif /* MIN_VERSION_HCodecs */
+
 /* package base-4.12.0.0 */
 #ifndef VERSION_base
 #define VERSION_base "4.12.0.0"
@@ -98,6 +109,17 @@
   (major1) == 3 && (major2) <  2 || \
   (major1) == 3 && (major2) == 2 && (minor) <= 4)
 #endif /* MIN_TOOL_VERSION_alex */
+
+/* tool cpphs-1.20.9 */
+#ifndef TOOL_VERSION_cpphs
+#define TOOL_VERSION_cpphs "1.20.9"
+#endif /* TOOL_VERSION_cpphs */
+#ifndef MIN_TOOL_VERSION_cpphs
+#define MIN_TOOL_VERSION_cpphs(major1,major2,minor) (\
+  (major1) <  1 || \
+  (major1) == 1 && (major2) <  20 || \
+  (major1) == 1 && (major2) == 20 && (minor) <= 9)
+#endif /* MIN_TOOL_VERSION_cpphs */
 
 /* tool gcc-7.2.0 */
 #ifndef TOOL_VERSION_gcc

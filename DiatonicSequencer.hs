@@ -9,7 +9,7 @@ import Scales
 import Songs
 import Helpers
 import Envelopes
-import MidiStuff (MidiSequence)
+-- import MidiStuff (MidiSequence)
 
 tonalCenter :: Pitch
 tonalCenter = Pitch 9 4
@@ -57,8 +57,8 @@ freqFromPitchTET temperament (Pitch pc oct) = let
 
 -- ==================================================================
 
-sequenceToMidi :: Sequence -> MidiSequence
-sequenceToMidi = undefined
+-- sequenceToMidi :: Sequence -> MidiSequence
+-- sequenceToMidi = undefined
 
 -- ====================================================================================================
 

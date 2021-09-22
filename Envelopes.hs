@@ -16,7 +16,7 @@ import General (Volume, Seconds, Pulse, sampleRate)
 
 
 data EnvSegment = EnvAttack | EnvDecay | EnvSustain | EnvRelease | EnvDone
-  deriving (Eq, Ord, Enum)
+  deriving (Eq, Ord, Enum, Show)
 data VolEnv = VolEnv {
   _attackSlope :: Float,
   _decaySlope :: Float,
