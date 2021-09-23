@@ -13,30 +13,18 @@ import Control.Lens
 import General (Pulse, Hz, Volume, Seconds)
 
 
+-- #TODO replace _cutoff with something else, 
+--  it doesn't make sense to change the cutoff of a reverb filter
 
--- The state here probably doesn't need to be Pulse
--- maybe: 
--- data Filter a = Filter {
---   state :: a,
---   filt :: (Pulse -> State a Pulse)
--- }
-
-data Filter = Filter {
-  _prevOut :: Pulse, 
+data Filter a = Filter {
+  _storage :: a, 
   _cutoff :: Hz,
-  _filtFunc :: FilterFunc
+  _filtFunc :: FilterFunc a
 }
 
 
-type FilterFunc = (Pulse -> State Filter Pulse)
+type FilterFunc a = (Pulse -> State (Filter a) Pulse)
 
--- type FilterFunc2 a = (Pulse -> State (Filter Pulse))
-
--- data Filter2 a = Filter2 {
---   _internalState2 :: a,
---   _cutoff2 :: Hz,
---   _filtFunc2 :: FilterFunc2 a
--- }
 
 
 -- type FilterState = (a, a -> Pulse -> (a,Pulse))
@@ -49,7 +37,6 @@ runFiltEnvCurve (FiltEnvCurve f) = f
 
 -- makes the lenses, calls the lens for _prevOut just prevOut
 makeLenses ''Filter
--- makeLenses ''Filter2
 
 -- ================================================================
 
@@ -59,28 +46,42 @@ makeLenses ''Filter
 -- #TODO could make Filter be polymorphic in its internal state
 
 
-hashtagNoFilter :: FilterFunc
+hashtagNoFilter :: FilterFunc ()
 hashtagNoFilter = return 
 
-lowPass :: Seconds -> FilterFunc
+lowPass :: Seconds -> FilterFunc Pulse
 lowPass dt = (\pulse -> state $ \fs -> 
-    let prev = fs ^. prevOut
-        freq = fs ^. cutoff
-        rc = 1/(2*pi*freq)
-        alpha = dt / (rc + dt)
-        next = alpha*pulse +  (1-alpha) * prev
-    in (next, fs & prevOut .~ next)
+  let 
+    prev = fs ^. storage
+    freq = fs ^. cutoff
+    rc = 1/(2*pi*freq)
+    alpha = dt / (rc + dt)
+    next = alpha*pulse +  (1-alpha) * prev
+  in (next, fs & storage .~ next)
   )
 
 -- #TODO highPass needs prevOut AND prevIn, do some polymorphism magic
-highPass :: Seconds -> FilterFunc
+highPass :: Seconds -> FilterFunc Pulse
 highPass dt = (\pulse -> state $ \fs -> 
-    let prev = fs ^. prevOut -- this is actually prevOut - prevIn
-        freq = fs ^. cutoff
-        rc = 1/(2*pi*freq)
-        alpha = rc / (rc + dt)
-        next = alpha*pulse +  alpha * prev
-    in (next, fs & prevOut .~ (next - pulse) ) 
+    let 
+      prev = fs ^. storage -- prev == prevOut - prevIn
+      freq = fs ^. cutoff
+      rc = 1/(2*pi*freq)
+      alpha = rc / (rc + dt)
+      next = alpha*pulse +  alpha * prev
+    in (next, fs & storage .~ (next - pulse) ) 
+  )
+
+-- #TODO highPass needs prevOut AND prevIn, do some polymorphism magic
+newHighPass :: Seconds -> FilterFunc (Pulse, Pulse)
+newHighPass dt = (\pulse -> state $ \fs -> 
+    let 
+      (prevIn, prevOut) = fs ^. storage
+      freq = fs ^. cutoff
+      rc = 1/(2*pi*freq)
+      alpha = rc / (rc + dt)
+      next = alpha*pulse +  alpha * (prevOut - prevIn)
+    in (next, fs & storage .~ (pulse, next) ) 
   )
 
 -- #TODO make filters composable?  want to have bandPass lo hi = highPass lo . lowPass hi 
@@ -88,7 +89,7 @@ highPass dt = (\pulse -> state $ \fs ->
 -- ===============================================
 
 
-mapFilter :: FilterFunc -> [Pulse] -> State Filter [Pulse]
+mapFilter :: FilterFunc a -> [Pulse] -> State (Filter a) [Pulse]
 mapFilter _filt [] = return []
 mapFilter _filt (pulse:pulses) = do
   firstFiltered <- _filt pulse 

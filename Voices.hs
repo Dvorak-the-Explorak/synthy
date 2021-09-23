@@ -2,6 +2,7 @@
            , MultiParamTypeClasses
            , TemplateHaskell
            , TypeSynonymInstances
+           , FlexibleInstances
   #-}
 
 module Voices where
@@ -28,7 +29,7 @@ data Voice = Voice {
   _voiceOsc :: Oscillator, 
   _voiceVenv :: VolEnv,
   _voiceFiltEnv :: VolEnv,
-  _voiceFilt :: Filter,
+  _voiceFilt :: Filter Pulse,
   _voiceFiltEnvCurve :: FiltEnvCurve, 
   _voiceNote :: NoteNumber
 }
@@ -71,7 +72,7 @@ defaultVoice = Voice {
         _attackSlope=20, _decaySlope=8, _sustainLevel=0.01, 
         _releaseSlope=1, _currentState=EnvAttack, _volume=0
     },
-    _voiceFilt = Filter {_prevOut = 0, _cutoff = 400, _filtFunc = lowPass (1/sampleRate)},
+    _voiceFilt = Filter {_storage = 0, _cutoff = 400, _filtFunc = lowPass (1/sampleRate)},
     _voiceFiltEnvCurve = FiltEnvCurve (\v -> 800 + 16000*v),
     _voiceNote = 0
 }

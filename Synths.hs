@@ -26,7 +26,7 @@ import Codec.Midi
 -- FullSynth is just a [Voice] with a global filter, modulated by LFO
 data FullSynth = FullSynth {
   _fullSynthVoices :: [Voice], 
-  _fullSynthFilt :: Filter,
+  _fullSynthFilt :: Filter Pulse,
   _fullSynthLfo :: Oscillator,
   _fullSynthLfoStrength :: Float,
   _fullSynthMakeVoice :: (NoteNumber -> Voice)
@@ -163,7 +163,7 @@ synthesiseMidiTrack ((ticks, message):messages) = do
 defaultSynth :: FullSynth
 defaultSynth = FullSynth {
   _fullSynthVoices = ([]), 
-  _fullSynthFilt = Filter {_prevOut =0, _cutoff = 800, _filtFunc = highPass (1/sampleRate)},
+  _fullSynthFilt = Filter {_storage =0, _cutoff = 800, _filtFunc = highPass (1/sampleRate)},
   _fullSynthLfo = lfo1s & freq .~ 4,
   _fullSynthLfoStrength = 400 * 10,
   _fullSynthMakeVoice = defaultMakeVoice
