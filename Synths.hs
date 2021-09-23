@@ -28,7 +28,8 @@ data FullSynth = FullSynth {
   _fullSynthVoices :: [Voice], 
   _fullSynthFilt :: Filter,
   _fullSynthLfo :: Oscillator,
-  _fullSynthLfoStrength :: Float
+  _fullSynthLfoStrength :: Float,
+  _fullSynthMakeVoice :: (NoteNumber -> Voice)
 }
 
 makeFields ''FullSynth
@@ -65,13 +66,13 @@ releaseVoices noteNum voices = mapWhere ((==noteNum) . (view note)) releaseVoice
 
 -- if there are any voices for that note, set the envelope to EnvAttack state
 --  otherwise add a new voice for the note
-noteOnVoices :: NoteNumber -> State [Voice] ()
-noteOnVoices noteNum = modify $ \voices -> 
+noteOnVoicesWith :: (NoteNumber -> Voice) ->  NoteNumber -> State [Voice] ()
+noteOnVoicesWith makeVoice noteNum = modify $ \voices -> 
     if any ((==noteNum) . (view note)) voices
       -- revert envelope to state 1
       then restartVoices noteNum voices
       -- add a new voice for that note
-      else (defaultMakeVoice noteNum):voices
+      else (makeVoice noteNum):voices
 
 -- set the envelope of any voices with the corrseponding note to EnvRelease state
 noteOffVoices :: NoteNumber -> State [Voice] ()
@@ -126,7 +127,9 @@ runFullSynth dt | dt < (1.0/sampleRate) = return []
                           in runFullSynthSteps n (1.0/sampleRate)
 
 noteOnFullSynth :: NoteNumber -> State FullSynth ()
-noteOnFullSynth note = overState voices $ noteOnVoices note
+noteOnFullSynth note = do
+  make <- gets (view $ makeVoice)
+  overState voices $ noteOnVoicesWith make note
 
 noteOffFullSynth :: NoteNumber -> State FullSynth ()
 noteOffFullSynth note = overState voices $ noteOffVoices note
@@ -162,7 +165,8 @@ defaultSynth = FullSynth {
   _fullSynthVoices = ([]), 
   _fullSynthFilt = Filter {_prevOut =0, _cutoff = 800, _filtFunc = highPass (1/sampleRate)},
   _fullSynthLfo = lfo1s & freq .~ 4,
-  _fullSynthLfoStrength = 400 * 10
+  _fullSynthLfoStrength = 400 * 10,
+  _fullSynthMakeVoice = defaultMakeVoice
 }
 
 

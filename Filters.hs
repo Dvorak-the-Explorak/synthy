@@ -27,7 +27,17 @@ data Filter = Filter {
   _filtFunc :: FilterFunc
 }
 
+
 type FilterFunc = (Pulse -> State Filter Pulse)
+
+-- type FilterFunc2 a = (Pulse -> State (Filter Pulse))
+
+-- data Filter2 a = Filter2 {
+--   _internalState2 :: a,
+--   _cutoff2 :: Hz,
+--   _filtFunc2 :: FilterFunc2 a
+-- }
+
 
 -- type FilterState = (a, a -> Pulse -> (a,Pulse))
 -- type FilterState = State a Pulse
@@ -39,9 +49,14 @@ runFiltEnvCurve (FiltEnvCurve f) = f
 
 -- makes the lenses, calls the lens for _prevOut just prevOut
 makeLenses ''Filter
+-- makeLenses ''Filter2
 
 -- ================================================================
 
+
+
+-- #TODO some other filter types need different states to just `Pulse`
+-- #TODO could make Filter be polymorphic in its internal state
 
 
 hashtagNoFilter :: FilterFunc
