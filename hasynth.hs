@@ -39,8 +39,8 @@ import Codec.ByteString.Parser (runParser)
 -- ================================================================
 -- ================================================================
 
-filename :: FilePath
-filename = "output.bin"
+outputFile :: FilePath
+outputFile = "output.bin"
 
 
 performToyMidi :: [ToyMidi] -> [Pulse]
@@ -49,8 +49,11 @@ performToyMidi midi = evalState (synthesiseMidiFullSynth midi) defaultSynth
 performMidi :: Track Ticks -> [Pulse]
 performMidi track = evalState (synthesiseMidiTrack track) defaultSynth
 
+performMidiWithSynth :: FullSynth -> Track Ticks -> [Pulse]
+performMidiWithSynth synth track = evalState (synthesiseMidiTrack track) synth
 
-
+-- performMidiSaw :: Track Ticks -> [Pulse]
+-- performMidiSaw track = performMidiWithSynth $ defaultSynth & 
 
 testSeq1 :: [ToyMidi]
 testSeq1 = [ToyNoteOn 69 0, ToyNoteOff 69 5,
@@ -66,11 +69,11 @@ testSeq2 = [ToyNoteOn 69 0, ToyNoteOn 73 0.5, ToyNoteOn 76 0.5, ToyNoteOn 81 0.5
 -- =====================================================
 
 main = do
-
+  -- printMidi "maralinga.mid"
   putStrLn $ printf "Playing something"
-  play
+  play "c_major.mid"
   -- printSong
-  putStrLn $ "made " ++ filename
+  putStrLn $ "made " ++ outputFile
 
 
 printSong :: IO ()
@@ -84,31 +87,44 @@ byteStringFromPulses :: [Pulse] -> B.ByteString
 byteStringFromPulses pulses = B.toLazyByteString $ mconcat $ map B.floatLE pulses
 
 save :: B.ByteString -> IO()
-save song = saveAs filename song
+save song = saveAs outputFile song
 
 saveAs :: FilePath -> B.ByteString -> IO()
 saveAs path song = B.writeFile path song
 
-play :: IO ()
-play = do
-
-  something <- fmap (runParser parseMidi) $ B.readFile "c_major.mid"
-  case something of
+printMidi :: FilePath -> IO ()
+printMidi inputFile = do
+  parsedMidi <- fmap (runParser parseMidi) $ B.readFile inputFile
+  case parsedMidi of
     (Left errorString) -> putStrLn errorString
     (Right midi) -> do
       putStrLn $ show $ timeDiv midi
-      mapM putStrLn $ map show $ head $ tracks midi 
-      -- mapM putStrLn $ map (show . length) $ tracks midi 
+      putStrLn $ (show $ length $ tracks midi) ++ " tracks found"
+      mapM (mapM putStrLn . map show) $ tracks midi
+      return ()
 
-      let firstTrack = head $ tracks midi
+
+play :: FilePath -> IO ()
+play inputFile = do
+
+  parsedMidi <- fmap (runParser parseMidi) $ B.readFile inputFile
+  case parsedMidi of
+    (Left errorString) -> putStrLn errorString
+    (Right midi) -> do
+      putStrLn $ show $ timeDiv midi
+      putStrLn $ show $ length $ tracks midi
+      -- mapM putStrLn $ map show $ head $ tracks midi 
+      -- mapM putStrLn $ map (show . length) $ tracks midi 
 
       -- pulses = map hardClip $ performToyMidi testSeq2
       -- #TODO interpret the midi TimeDiv and TempoChange messages to work out the time steps
-      let pulses = map hardClip $ performMidi $ map (first (*100)) firstTrack
+      let pulsesFromTracks track = performMidi $ map (first (*24)) track
+      let outputs = map pulsesFromTracks $ tracks midi
+      let pulses = map (hardClip . sum) $ transpose outputs
 
       save $ byteStringFromPulses pulses
       -- runCommand :: String -> IO (processHandleOrSomething)
-      _ <- runCommand $ printf "ffplay -loglevel quiet -loop 1 -showmode 2 -f f32le -ar %f %s" sampleRate filename
+      _ <- runCommand $ printf "ffplay -loglevel quiet -loop 1 -showmode 2 -f f32le -ar %f %s" sampleRate outputFile
       return ()
 
 --ffmpeg -f f32le -ar 48000.0 -i output.bin output.mp3
