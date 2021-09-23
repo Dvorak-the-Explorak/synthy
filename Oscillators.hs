@@ -14,21 +14,6 @@ import Data.Fixed (mod')
 
 
 type Waveform = Seconds -> Pulse
-
-pureTone :: Waveform
-pureTone = (sin . (*) (2*pi))
-
-sawTone :: Waveform
--- sawTone = (flip (-) 1) . (*2) . (flip mod' 1.0)
-sawTone = \t -> 2 * (t `mod'` 1) - 1
-
-squareTone :: Waveform
-squareTone = (\t -> if (t `mod'` 1.0 < 0.5) then -1.0 else 1.0)
-
-
--- ==========================================
-
-
 data Oscillator = Oscillator {
   _wave :: Waveform,
   _phase :: Phase,
@@ -51,7 +36,30 @@ lfo1s = Oscillator {
 -- makes the lenses, calls the lens for _wave just wave
 makeLenses ''Oscillator
 
+-- ==========================================
+
+
+pureTone :: Waveform
+pureTone = (sin . (*) (2*pi))
+
+sawTone :: Waveform
+-- sawTone = (flip (-) 1) . (*2) . (flip mod' 1.0)
+sawTone = \t -> 2 * (t `mod'` 1) - 1
+
+squareTone :: Waveform
+squareTone = (\t -> if (t `mod'` 1.0 < 0.5) then -1.0 else 1.0)
+
+
+
 -- ============================================================
+
+waveformFromSamples :: [Float] -> Float -> Float
+waveformFromSamples vals x = let
+    step = 1.0 / (fromIntegral $ length vals - 1)
+    i = (floor $ (x/step)) `mod` (length vals)
+    next = (i+1) `mod` (length vals)
+    frac = (x - (fromIntegral i)*step)/step
+  in (vals !! i) + frac * ((vals !! next) - (vals !! i))
 
 
 

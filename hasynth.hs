@@ -30,13 +30,14 @@ import Helpers
 import DiatonicSequencer
 import Codec.Midi
 import Codec.ByteString.Parser (runParser)
--- import Debug.Trace
+import Debug.Trace
 
 -- #TODO interpret more midi messages:
 --    TempoChange and TimeDiv to get the speed of songs right
 --    ProgramChange to get different instruments?
 --    Velocity in NoteOn and NoteOff
 -- #TODO percussion sounds - white noise
+-- #TODO voices with samples - load up a general midi soundfont and use that
 -- #TODO more filters:
 --    Reverb
 --    lowPass with resonance
@@ -48,6 +49,11 @@ import Codec.ByteString.Parser (runParser)
 -- #TODO live stream mode, plug a midi control
 
 -- ================================================================
+
+
+x_squared :: [Float]
+x_squared = map ((\x -> x*x) . (/256)) [0..256]
+
 -- ================================================================
 
 outputFile :: FilePath
@@ -79,12 +85,16 @@ performMidiWithWaveform wf = performMidiWithSynth $ over makeVoice ((set (osc.wa
 -- =====================================================
 
 main = do
+  let wave = waveformFromSamples x_squared
+  putStrLn $ show $ wave 1
+  putStrLn $ show $ wave 0.1
+
   -- printMidi "mario2_overworld.mid"
   
-  putStrLn $ printf "Playing something"
-  play "c_major.mid"
-  -- playOnabots
-  putStrLn $ "made " ++ outputFile
+  -- putStrLn $ printf "Playing something"
+  -- play "pokemon_rb_center.mid"
+  -- -- playOnabots
+  -- putStrLn $ "made " ++ outputFile
 
 
 printSong :: IO ()
@@ -170,7 +180,7 @@ play inputFile = do
       -- mapM putStrLn $ map show $ head $ tracks midi 
       -- mapM putStrLn $ map (show . length) $ tracks midi 
 
-      let timeScale = first (*100)
+      let timeScale = first (*60)
 
       -- pulses = map hardClip $ performToyMidi testSeq2
       -- #TODO interpret the midi TimeDiv and TempoChange messages to work out the time steps

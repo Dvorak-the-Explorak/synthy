@@ -16,15 +16,19 @@ import General (Pulse, Hz, Volume, Seconds)
 -- #TODO replace _cutoff with something else, 
 --  it doesn't make sense to change the cutoff of a reverb filter
 
+
+class FilteryBoi f where
+  filterFunction :: f -> Pulse -> State f Pulse
+
 data Filter a = Filter {
   _storage :: a, 
   _cutoff :: Hz,
   _filtFunc :: FilterFunc a
 }
-
-
 type FilterFunc a = (Pulse -> State (Filter a) Pulse)
 
+instance FilteryBoi (Filter a) where 
+  filterFunction filt = _filtFunc filt
 
 
 -- type FilterState = (a, a -> Pulse -> (a,Pulse))
