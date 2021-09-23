@@ -43,9 +43,6 @@ outputFile :: FilePath
 outputFile = "output.bin"
 
 
-performToyMidi :: [ToyMidi] -> [Pulse]
-performToyMidi midi = evalState (synthesiseMidiFullSynth midi) defaultSynth
-
 performMidi :: Track Ticks -> [Pulse]
 performMidi track = evalState (synthesiseMidiTrack track) defaultSynth
 
@@ -54,16 +51,6 @@ performMidiWithSynth synth track = evalState (synthesiseMidiTrack track) synth
 
 -- performMidiSaw :: Track Ticks -> [Pulse]
 -- performMidiSaw track = performMidiWithSynth $ defaultSynth & 
-
-testSeq1 :: [ToyMidi]
-testSeq1 = [ToyNoteOn 69 0, ToyNoteOff 69 5,
-            ToyNothing 5]
-
-testSeq2 :: [ToyMidi]
-testSeq2 = [ToyNoteOn 69 0, ToyNoteOn 73 0.5, ToyNoteOn 76 0.5, ToyNoteOn 81 0.5, 
-            ToyNoteOff 69 2, ToyNoteOff 73 0, ToyNoteOff 76 0, ToyNoteOff 81 0,
-            ToyNothing 10]
-
 
 -- =====================================================
 -- =====================================================

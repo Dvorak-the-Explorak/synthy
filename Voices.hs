@@ -45,8 +45,8 @@ makeFields ''Voice
 
 
 -- #TODO un-hardcode the oscillator type and ADSR values
-voiceFromNote :: NoteNumber -> Voice
-voiceFromNote noteNum = defaultVoice  & osc . freq .~ (hzFromNoteNumber noteNum)
+defaultMakeVoice :: NoteNumber -> Voice
+defaultMakeVoice noteNum = defaultVoice  & osc . freq .~ (hzFromNoteNumber noteNum)
                                       & note .~ noteNum
 
 

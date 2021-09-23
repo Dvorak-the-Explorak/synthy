@@ -8,10 +8,10 @@
 module Synths where
 
 import General (Seconds, Pulse, sampleRate)
-import Voices (Voice(..), voiceFromNote, stepVoice, releaseVoice, restartVoice, note, venv)
+import Voices (Voice(..), defaultMakeVoice, stepVoice, releaseVoice, restartVoice, note, venv)
 import Filters (Filter(..), Filter(..), lowPass, highPass, hashtagNoFilter, mapFilter, filtFunc, cutoff)
 import Helpers (stateMap, overState, mapWhere)
-import MidiStuff (NoteNumber, ToyMidi(..))
+import MidiStuff (NoteNumber)
 import Envelopes (VolEnv(..), EnvSegment(..), currentState)
 import Oscillators (Oscillator, zeroOsc, lfo1s, stepOsc, freq)
 
@@ -99,7 +99,7 @@ noteOnSynth noteNum = modify $ \voices ->
       -- revert envelope to state 1
       then restartVoices noteNum voices
       -- add a new voice for that note
-      else (voiceFromNote noteNum):voices
+      else (defaultMakeVoice noteNum):voices
 
 -- set the envelope of any voices with the corrseponding note to EnvRelease state
 noteOffSynth :: NoteNumber -> State VoicedSynth ()
@@ -160,41 +160,6 @@ noteOffFullSynth note = overState voices $ noteOffSynth note
 
 
 -- ================================================================================
-
-synthesiseMidiVoicedSynth :: [ToyMidi] -> State VoicedSynth [Pulse]
-synthesiseMidiVoicedSynth [] = return []
-synthesiseMidiVoicedSynth ((ToyNoteOn note dt):mids) = do 
-  output <- runSynth dt
-  noteOnSynth note
-  remainder <- synthesiseMidiVoicedSynth mids
-  return $ output ++ remainder
-synthesiseMidiVoicedSynth ((ToyNoteOff note dt):mids) = do
-    output <- runSynth dt
-    noteOffSynth note
-    remainder <- synthesiseMidiVoicedSynth mids
-    return $ output ++ remainder
-synthesiseMidiVoicedSynth ((ToyNothing dt):mids) = do
-    output <- runSynth dt
-    remainder <- synthesiseMidiVoicedSynth mids
-    return $ output ++ remainder
-
-
-synthesiseMidiFullSynth :: [ToyMidi] -> State FullSynth [Pulse]
-synthesiseMidiFullSynth [] = return []
-synthesiseMidiFullSynth ((ToyNoteOn note dt):mids) = do 
-  output <- runFullSynth dt
-  noteOnFullSynth note
-  remainder <- synthesiseMidiFullSynth mids
-  return $ output ++ remainder
-synthesiseMidiFullSynth ((ToyNoteOff note dt):mids) = do
-    output <- runFullSynth dt
-    noteOffFullSynth note
-    remainder <- synthesiseMidiFullSynth mids
-    return $ output ++ remainder
-synthesiseMidiFullSynth ((ToyNothing dt):mids) = do
-    output <- runFullSynth dt
-    remainder <- synthesiseMidiFullSynth mids
-    return $ output ++ remainder
 
 
 synthesiseMidiTrack :: Track Ticks -> State FullSynth [Pulse]
