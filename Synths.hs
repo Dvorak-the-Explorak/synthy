@@ -21,11 +21,11 @@ import Debug.Trace
 
 import Codec.Midi
 
-type VoicedSynth = ([Voice])
+-- type VoicedSynth = ([Voice])
 
--- FullSynth is just a VoicedSynth with a global filter, modulated by LFO
+-- FullSynth is just a [Voice] with a global filter, modulated by LFO
 data FullSynth = FullSynth {
-  _fullSynthVoices :: VoicedSynth, 
+  _fullSynthVoices :: [Voice], 
   _fullSynthFilt :: Filter,
   _fullSynthLfo :: Oscillator,
   _fullSynthLfoStrength :: Float
@@ -33,8 +33,11 @@ data FullSynth = FullSynth {
 
 makeFields ''FullSynth
 
-stepSynthVoices :: Seconds -> State VoicedSynth Pulse
-stepSynthVoices dt = fmap sum $ stateMap $ stepVoice dt
+stepVoices :: Seconds -> State [Voice] Pulse
+stepVoices dt = do
+  output <- fmap sum $ stateMap $ stepVoice dt
+  cullVoices
+  return output
 
 
 -- #TODO this isn't actually running, just iterating steps
@@ -42,59 +45,28 @@ stepSynthVoices dt = fmap sum $ stateMap $ stepVoice dt
 -- stateMap $ runVoice n dt :: State [Voice] [[Pulse foreach sample] foreach voice]
 -- firstState $ stateMap $ runVoice n dt :: State ([Voice], a)  [[Pulse foreach sample] foreach voice]
 -- fmap (map sum . transpose) $ firstState $ stateMap $ runVoice n dt :: State ([Voice], a)  [Pulse foreach sample (summed over voices)]
-runSynthVoices :: Int -> Seconds -> State VoicedSynth [Pulse]
-runSynthVoices 0 dt = return []
-runSynthVoices n dt = do
-  pulse <- stepSynthVoices dt
-  pulses <- runSynthVoices (n-1) dt
+runVoicesSteps :: Int -> Seconds -> State [Voice] [Pulse]
+runVoicesSteps 0 dt = return []
+runVoicesSteps n dt = do
+  pulse <- stepVoices dt
+  pulses <- runVoicesSteps (n-1) dt
   return (pulse:pulses)
 
 
-cullSynthVoices :: State VoicedSynth ()
-cullSynthVoices = let running = views (venv . currentState) (<EnvDone)
-                  in do
-                    -- voices <- get
-                    -- trace (show $ concat $ map (show . view (venv.currentState)) voices) $ modify (filter running)
-                    modify (filter running)
+cullVoices :: State [Voice] ()
+cullVoices = let running = views (venv . currentState) (<EnvDone)
+                  in modify (filter running)
 
--- -- #TODO At some point there should be explicit clipping.  Should it be here?
-stepSynth :: Seconds -> State VoicedSynth Pulse
-stepSynth dt = do
-  output <- stepSynthVoices dt
-  cullSynthVoices
-  return output
-
--- #TODO handle midi timing with fractional samples
--- Chunks the timestep into at most 1 second long chunks
---    this helps when voices end early,
---    as they're only culled once per call to runSynthSteps
---    and leaving them in the EnvDone state will waste time calculating zeros
--- #TODO could the EnvDone state be signalled somehow to automate the culling?
-runSynth :: Seconds -> State VoicedSynth [Pulse]
-runSynth dt | dt < (1.0/sampleRate) = return []
-               | dt > 1.0 = do 
-                  firstSec <- runSynthSteps (floor sampleRate) (1.0/sampleRate)
-                  remainder <- runSynth (dt - 1.0)
-                  return $ firstSec ++ remainder
-               | otherwise = let n = floor $ dt*sampleRate
-                          in runSynthSteps n (1.0/sampleRate)
-
-runSynthSteps :: Int -> Seconds -> State VoicedSynth [Pulse]
-runSynthSteps n dt = do
-  output <- runSynthVoices n dt
-  cullSynthVoices
-  return output
-
-restartVoices :: NoteNumber -> VoicedSynth -> VoicedSynth
+restartVoices :: NoteNumber -> [Voice] -> [Voice]
 restartVoices noteNum voices = mapWhere ((==noteNum) . (view note)) restartVoice voices
 
-releaseVoices :: NoteNumber -> VoicedSynth -> VoicedSynth
+releaseVoices :: NoteNumber -> [Voice] -> [Voice]
 releaseVoices noteNum voices = mapWhere ((==noteNum) . (view note)) releaseVoice voices
 
 -- if there are any voices for that note, set the envelope to EnvAttack state
 --  otherwise add a new voice for the note
-noteOnSynth :: NoteNumber -> State VoicedSynth ()
-noteOnSynth noteNum = modify $ \voices -> 
+noteOnVoices :: NoteNumber -> State [Voice] ()
+noteOnVoices noteNum = modify $ \voices -> 
     if any ((==noteNum) . (view note)) voices
       -- revert envelope to state 1
       then restartVoices noteNum voices
@@ -102,21 +74,16 @@ noteOnSynth noteNum = modify $ \voices ->
       else (defaultMakeVoice noteNum):voices
 
 -- set the envelope of any voices with the corrseponding note to EnvRelease state
-noteOffSynth :: NoteNumber -> State VoicedSynth ()
-noteOffSynth noteNum = modify $ releaseVoices noteNum 
-
-
-defaultVoicedSynth :: VoicedSynth
-defaultVoicedSynth = ([])
-
+noteOffVoices :: NoteNumber -> State [Voice] ()
+noteOffVoices noteNum = modify $ releaseVoices noteNum 
 
 
 -- ===================================================================================
 
 stepFullSynth :: Seconds -> State FullSynth Pulse
 stepFullSynth dt  = do
-  -- step the VoicedSynth
-  pulse <- overState voices $ stepSynth dt
+  -- step the [Voice]
+  pulse <- overState voices $ stepVoices dt
   
   -- run the LFO
   -- #TODO Oh no I don't have dt in this function. Lets get rid of dt and leave it as a global constant?
@@ -143,6 +110,12 @@ runFullSynthSteps n dt = do
   pulses <- runFullSynthSteps (n-1) dt
   return (pulse:pulses)
 
+-- #TODO handle midi timing with fractional samples
+-- Chunks the timestep into at most 1 second long chunks
+--    this helps when voices end early,
+--    as they're only culled once per call to runSynthSteps
+--    and leaving them in the EnvDone state will waste time calculating zeros
+-- #TODO could the EnvDone state be signalled somehow to automate the culling?
 runFullSynth :: Seconds -> State FullSynth [Pulse]
 runFullSynth dt | dt < (1.0/sampleRate) = return []
                 | dt > 1.0 = do 
@@ -153,10 +126,10 @@ runFullSynth dt | dt < (1.0/sampleRate) = return []
                           in runFullSynthSteps n (1.0/sampleRate)
 
 noteOnFullSynth :: NoteNumber -> State FullSynth ()
-noteOnFullSynth note = overState voices $ noteOnSynth note
+noteOnFullSynth note = overState voices $ noteOnVoices note
 
 noteOffFullSynth :: NoteNumber -> State FullSynth ()
-noteOffFullSynth note = overState voices $ noteOffSynth note
+noteOffFullSynth note = overState voices $ noteOffVoices note
 
 
 -- ================================================================================
