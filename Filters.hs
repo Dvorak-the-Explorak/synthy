@@ -31,12 +31,12 @@ instance FilteryBoi (Filter a) where
   filterFunction filt = _filtFunc filt
 
 
--- type FilterState = (a, a -> Pulse -> (a,Pulse))
--- type FilterState = State a Pulse
--- It's not actually a volume, but that's what the filter envelope outputs
-newtype FiltEnvCurve = FiltEnvCurve (Volume -> Hz)
-runFiltEnvCurve :: FiltEnvCurve -> (Volume -> Hz)
-runFiltEnvCurve (FiltEnvCurve f) = f
+-- -- type FilterState = (a, a -> Pulse -> (a,Pulse))
+-- -- type FilterState = State a Pulse
+-- -- It's not actually a volume, but that's what the filter envelope outputs
+-- newtype FiltEnvCurve = FiltEnvCurve (Volume -> Hz)
+-- runFiltEnvCurve :: FiltEnvCurve -> (Volume -> Hz)
+-- runFiltEnvCurve (FiltEnvCurve f) = f
 
 
 -- makes the lenses, calls the lens for _prevOut just prevOut

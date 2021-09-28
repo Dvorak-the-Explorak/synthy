@@ -41,11 +41,7 @@ stepVoices dt = do
   return output
 
 
--- #TODO this isn't actually running, just iterating steps
--- runVoice n dt :: State Voice [Pulse for each sample]
--- stateMap $ runVoice n dt :: State [Voice] [[Pulse foreach sample] foreach voice]
--- firstState $ stateMap $ runVoice n dt :: State ([Voice], a)  [[Pulse foreach sample] foreach voice]
--- fmap (map sum . transpose) $ firstState $ stateMap $ runVoice n dt :: State ([Voice], a)  [Pulse foreach sample (summed over voices)]
+-- #TODO this isn't actually "running", just iterating steps
 runVoicesSteps :: Int -> Seconds -> State [Voice] [Pulse]
 runVoicesSteps 0 dt = return []
 runVoicesSteps n dt = do

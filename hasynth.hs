@@ -28,8 +28,10 @@ import Synths
 import Scales
 import Helpers
 import DiatonicSequencer
+import Wavetable
 import Codec.Midi
-import Codec.ByteString.Parser (runParser)
+import Codec.ByteString.Parser (runParser, getBytes)
+import Data.WAVE
 import Debug.Trace
 
 -- #TODO interpret more midi messages:
@@ -66,35 +68,38 @@ performMidi = performMidiSquare
 performMidiWithSynth :: FullSynth -> Track Ticks -> [Pulse]
 performMidiWithSynth synth track = evalState (synthesiseMidiTrack track) synth
 
-
-
 performMidiSaw :: Track Ticks -> [Pulse]
--- performMidiSaw = performMidiWithSynth $ over makeVoice (\f -> (\n -> (f n) & osc . wave .~ sawTone)) defaultSynth
--- performMidiSaw = performMidiWithSynth $ over makeVoice (\f -> (set (osc.wave) sawTone) . f) defaultSynth
-performMidiSaw = performMidiWithWaveform sawTone
-
-performMidiSquare = performMidiWithWaveform squareTone
-performMidiPure = performMidiWithWaveform pureTone
+performMidiSaw = performMidiWithOscillator sawOsc
+performMidiSquare = performMidiWithOscillator squareOsc
+performMidiSine = performMidiWithOscillator sineOsc
 
 performMidiWithWaveform :: Waveform -> Track Ticks -> [Pulse]
--- performMidiWithWaveform wf  = performMidiWithSynth $ over makeVoice (\f -> (\n -> (f n) & osc . wave .~ wf)) defaultSynth
--- performMidiWithWaveform wf  = performMidiWithSynth $ over makeVoice (\f -> (set (osc.wave) wf) . f) defaultSynth
-performMidiWithWaveform wf = performMidiWithSynth $ over makeVoice ((set (osc.wave) wf) . ) defaultSynth
+performMidiWithWaveform wf = performMidiWithSynth $ over makeVoice ((set osc (makeOsc  wf)) . ) defaultSynth
+
+performMidiWithOscillator :: Oscillator -> Track Ticks -> [Pulse]
+-- performMidiWithOscillator osc_  = performMidiWithSynth $ over makeVoice (\f -> (\n -> (f n) & osc .~ osc_)) defaultSynth
+-- performMidiWithOscillator osc_  = performMidiWithSynth $ over makeVoice (\f -> (set osc osc_) . f) defaultSynth
+performMidiWithOscillator osc_ = performMidiWithSynth $ over makeVoice ((set osc osc_) . ) defaultSynth
 
 -- =====================================================
 -- =====================================================
 
 main = do
-  let wave = waveformFromSamples x_squared
-  putStrLn $ show $ wave 1
-  putStrLn $ show $ wave 0.1
+  -- wavFile <- (Wav.importFile "ESW_FM_Grizzly.wav") :: IO ( Either String (Audio Int16))
+  -- wavFile <- getBytes 58 Wav.parseWav $ B.readFile "ESW_FM_Grizzly.wav"
+  -- raw_wav <- return $ BG.runGet Wav.parseWav $ B.readFile "ESW_FM_Grizzly.wav"
+  -- wav <- decodeWaveFile "ESW_FM_Grizzly.wav"
+  -- wav <- getWAVEFile "ESW_FM_Grizzly.wav"
+  -- -- putStrLn $ show $ map (sampleToDouble . head) $ waveSamples wav
+  -- putStrLn $ waveFileDescription wav
+  -- putStrLn "Hello, world"
 
   -- printMidi "mario2_overworld.mid"
   
-  -- putStrLn $ printf "Playing something"
-  -- play "pokemon_rb_center.mid"
-  -- -- playOnabots
-  -- putStrLn $ "made " ++ outputFile
+  putStrLn $ printf "Playing something"
+  play "pokemon_gs_lavender_town.mid"
+  -- playOnabots
+  putStrLn $ "made " ++ outputFile
 
 
 printSong :: IO ()
@@ -151,10 +156,10 @@ playOnabots = do
 
 
       let v1 = performMidiSaw $ map timeScale $ (tracks midi) !! 1 
-      let v2 = performMidiPure $ map timeScale $ (tracks midi) !! 2 
+      let v2 = performMidiSine $ map timeScale $ (tracks midi) !! 2 
       let v3 = performMidiSaw $ map timeScale $ (tracks midi) !! 3
       let v4 = performMidiSquare $ map timeScale $ (tracks midi) !! 4
-      let v5 = performMidiPure $ map timeScale $ (tracks midi) !! 5
+      let v5 = performMidiSine $ map timeScale $ (tracks midi) !! 5
       let v6 = performMidiSquare $ map timeScale $ (tracks midi) !! 6 
       let v7 = performMidiSquare $ map timeScale $ (tracks midi) !! 7
       let outputs = [v1, v2, v3 ,v4, v5, v6, v7]

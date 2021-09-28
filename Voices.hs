@@ -10,7 +10,7 @@ module Voices where
 import Control.Monad.State
 import Control.Lens
 
-import General (sampleRate, Pulse, Seconds)
+import General (sampleRate, Pulse, Seconds, Volume, Hz)
 import MidiStuff (NoteNumber(..), hzFromNoteNumber)
 import Oscillators
 import Filters 
@@ -30,7 +30,7 @@ data Voice = Voice {
   _voiceVenv :: VolEnv,
   _voiceFiltEnv :: VolEnv,
   _voiceFilt :: Filter Pulse,
-  _voiceFiltEnvCurve :: FiltEnvCurve, 
+  _voiceFiltEnvCurve :: (Volume -> Hz), 
   _voiceNote :: NoteNumber
 }
 
@@ -61,9 +61,7 @@ restartVoice = (over venv restartEnv) . (over filtEnv restartEnv)
 -- #TODO default voice could be better thought through
 defaultVoice :: Voice
 defaultVoice = Voice {
-    _voiceOsc = Oscillator {
-        _wave=sawTone, _phase=0.0, _freq=1.0
-    },
+    _voiceOsc = sawOsc,
     _voiceVenv = VolEnv {
         _attackSlope=20, _decaySlope=2, _sustainLevel=0.7, 
         _releaseSlope=2, _currentState=EnvAttack, _volume=0
@@ -73,7 +71,7 @@ defaultVoice = Voice {
         _releaseSlope=1, _currentState=EnvAttack, _volume=0
     },
     _voiceFilt = Filter {_storage = 0, _cutoff = 400, _filtFunc = lowPass (1/sampleRate)},
-    _voiceFiltEnvCurve = FiltEnvCurve (\v -> 800 + 16000*v),
+    _voiceFiltEnvCurve = (\v -> 800 + 16000*v),
     _voiceNote = 0
 }
 
@@ -84,7 +82,7 @@ stepVoice dt = do
   -- #TODO Combine the Filter properties into one data type
   -- #TODO Turn this section into a stepFilterEnv stateOp
   filterFreqOffset <- overState filtEnv $ stepEnv dt
-  (FiltEnvCurve f) <- gets (view filtEnvCurve)
+  f <- gets (view filtEnvCurve)
   let filterFreq = f filterFreqOffset
   modify $ set (filt . cutoff) filterFreq
 

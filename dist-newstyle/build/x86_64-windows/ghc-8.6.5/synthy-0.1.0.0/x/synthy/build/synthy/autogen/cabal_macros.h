@@ -22,6 +22,17 @@
   (major1) == 0 && (major2) == 5 && (minor) <= 2)
 #endif /* MIN_VERSION_HCodecs */
 
+/* package WAVE-0.1.6 */
+#ifndef VERSION_WAVE
+#define VERSION_WAVE "0.1.6"
+#endif /* VERSION_WAVE */
+#ifndef MIN_VERSION_WAVE
+#define MIN_VERSION_WAVE(major1,major2,minor) (\
+  (major1) <  0 || \
+  (major1) == 0 && (major2) <  1 || \
+  (major1) == 0 && (major2) == 1 && (minor) <= 6)
+#endif /* MIN_VERSION_WAVE */
+
 /* package base-4.12.0.0 */
 #ifndef VERSION_base
 #define VERSION_base "4.12.0.0"
@@ -32,6 +43,17 @@
   (major1) == 4 && (major2) <  12 || \
   (major1) == 4 && (major2) == 12 && (minor) <= 0)
 #endif /* MIN_VERSION_base */
+
+/* package binary-0.8.6.0 */
+#ifndef VERSION_binary
+#define VERSION_binary "0.8.6.0"
+#endif /* VERSION_binary */
+#ifndef MIN_VERSION_binary
+#define MIN_VERSION_binary(major1,major2,minor) (\
+  (major1) <  0 || \
+  (major1) == 0 && (major2) <  8 || \
+  (major1) == 0 && (major2) == 8 && (minor) <= 6)
+#endif /* MIN_VERSION_binary */
 
 /* package bytestring-0.10.8.2 */
 #ifndef VERSION_bytestring
