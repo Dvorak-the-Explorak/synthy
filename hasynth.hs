@@ -69,17 +69,17 @@ performMidiWithSynth :: FullSynth -> Track Ticks -> [Pulse]
 performMidiWithSynth synth track = evalState (synthesiseMidiTrack track) synth
 
 performMidiSaw :: Track Ticks -> [Pulse]
-performMidiSaw = performMidiWithOscillator sawOsc
-performMidiSquare = performMidiWithOscillator squareOsc
-performMidiSine = performMidiWithOscillator sineOsc
+performMidiSaw = performMidiWithWaveform sawTone
+performMidiSquare = performMidiWithWaveform squareTone
+performMidiSine = performMidiWithWaveform pureTone
 
 performMidiWithWaveform :: Waveform -> Track Ticks -> [Pulse]
-performMidiWithWaveform wf = performMidiWithSynth $ over makeVoice ((set osc (makeOsc  wf)) . ) defaultSynth
+performMidiWithWaveform wf = performMidiWithSynth $ over makeVoice ((set (osc.wave) wf) . ) defaultSynth
 
-performMidiWithOscillator :: Oscillator -> Track Ticks -> [Pulse]
--- performMidiWithOscillator osc_  = performMidiWithSynth $ over makeVoice (\f -> (\n -> (f n) & osc .~ osc_)) defaultSynth
--- performMidiWithOscillator osc_  = performMidiWithSynth $ over makeVoice (\f -> (set osc osc_) . f) defaultSynth
-performMidiWithOscillator osc_ = performMidiWithSynth $ over makeVoice ((set osc osc_) . ) defaultSynth
+-- performMidiWithOscillator :: Oscillator -> Track Ticks -> [Pulse]
+-- -- performMidiWithOscillator osc_  = performMidiWithSynth $ over makeVoice (\f -> (\n -> (f n) & osc .~ osc_)) defaultSynth
+-- -- performMidiWithOscillator osc_  = performMidiWithSynth $ over makeVoice (\f -> (set osc osc_) . f) defaultSynth
+-- performMidiWithOscillator osc_ = performMidiWithSynth $ over makeVoice ((set osc osc_) . ) defaultSynth
 
 -- =====================================================
 -- =====================================================
