@@ -9,7 +9,7 @@ module Synths where
 
 import General (Seconds, Pulse, sampleRate, Hz)
 import Voices (Voice(..), defaultMakeVoice, stepVoice, releaseVoice, restartVoice, note, venv)
-import Filters (Filter(..), Filter(..), lowPass, highPass, mapFilter, param, runFilter)
+import Filters (Filter(..), Filter(..), lowPass, highPass, combFilter, mapFilter, param, runFilter)
 import Helpers (stateMap, overState, mapWhere)
 import MidiStuff (NoteNumber)
 import Envelopes (VolEnv(..), EnvSegment(..), currentState)
@@ -26,7 +26,7 @@ import Codec.Midi
 -- FullSynth is just a [Voice] with a global filter, modulated by LFO
 data FullSynth = FullSynth {
   _fullSynthVoices :: [Voice], 
-  _fullSynthFilt :: Filter Hz,
+  _fullSynthFilt :: Filter (Float, Int),
   _fullSynthLfo :: Oscillator,
   _fullSynthLfoStrength :: Float,
   _fullSynthMakeVoice :: (NoteNumber -> Voice)
@@ -88,7 +88,7 @@ stepFullSynth dt  = do
   strength <- gets (view lfoStrength)
 
   -- modulate the filter cutoff with the LFO
-  modify $ over (filt.param) (\x -> x+(moduland*strength))
+  modify $ over (filt.param._2) (\x -> x+(floor $ moduland*strength))
 
 
   -- -- get the filter
@@ -101,7 +101,7 @@ stepFullSynth dt  = do
   modify $ set filt newFilt 
 
   -- unmodulate the filter cutoff
-  modify $ over (filt.param) (\x -> x-moduland*strength)
+  modify $ over (filt.param._2) (\x -> x-(floor $ moduland*strength))
 
   return output
 
@@ -161,13 +161,24 @@ synthesiseMidiTrack ((ticks, message):messages) = do
     return $ output ++ remainder
 -- ==============================================================================
 
+-- oldDefaultSynth :: FullSynth
+-- oldDefaultSynth = FullSynth {
+--   _fullSynthVoices = ([]), 
+--   -- _fullSynthFilt = Filter {_storage =0, _cutoff = 800, _filtFunc = highPass (1/sampleRate)},
+--   _fullSynthFilt = (highPass (1/sampleRate)) & param .~ 800,
+--   _fullSynthLfo = lfo1s & freq .~ 4,
+--   _fullSynthLfoStrength = 400 * 10,
+--   _fullSynthMakeVoice = defaultMakeVoice
+-- }
+
+
 defaultSynth :: FullSynth
 defaultSynth = FullSynth {
   _fullSynthVoices = ([]), 
   -- _fullSynthFilt = Filter {_storage =0, _cutoff = 800, _filtFunc = highPass (1/sampleRate)},
-  _fullSynthFilt = (highPass (1/sampleRate)) & param .~ 800,
-  _fullSynthLfo = lfo1s & freq .~ 4,
-  _fullSynthLfoStrength = 400 * 10,
+  _fullSynthFilt = combFilter & param .~ (0.8, 200),
+  _fullSynthLfo = lfo1s & freq .~ 2,
+  _fullSynthLfoStrength = 200, -- 400 * 10,
   _fullSynthMakeVoice = defaultMakeVoice
 }
 

@@ -52,13 +52,6 @@ lowPass dt = Filter {
   _filterRun = lowPassFunc dt
 }
 
-oldHighPass :: Seconds -> Filter Hz
-oldHighPass dt = Filter {
-  _filterStorage = 0,
-  _filterParam = 0,
-  _filterRun = oldHighPassFunc dt
-}
-
 highPass :: Seconds -> Filter Hz
 highPass dt = Filter {
   _filterStorage = (0,0),
@@ -66,10 +59,22 @@ highPass dt = Filter {
   _filterRun = highPassFunc dt
 }
 
+hashtagNoFilter :: Filter ()
+hashtagNoFilter = Filter {
+  _filterStorage = (),
+  _filterParam = (),
+  _filterRun = hashtagNoFilterFunc
+}
 
--- #TODO some other filter types need different states to just `Pulse`
--- #TODO could make Filter be polymorphic in its internal state
+combFilter :: Filter (Float,Int)
+combFilter = Filter {
+  _filterStorage = [],
+  _filterParam = (0.8, 10),
+  _filterRun = combFilterFunc
+}
 
+
+-- ================================
 
 hashtagNoFilterFunc :: FilterFunc () ()
 hashtagNoFilterFunc _ = return 
@@ -83,16 +88,6 @@ lowPassFunc dt = (\cutoff pulse -> state $ \prev ->
   in (next, next)
   )
 
--- #TODO highPass needs prevOut AND prevIn
-oldHighPassFunc :: Seconds -> FilterFunc Pulse Hz
-oldHighPassFunc dt = (\cutoff pulse -> state $ \prev -> 
-    let 
-      rc = 1/(2*pi*cutoff)
-      alpha = rc / (rc + dt)
-      next = alpha*pulse +  alpha * prev
-    in (next, (next - pulse) ) 
-  )
-
 
 highPassFunc :: Seconds -> FilterFunc (Pulse,Pulse) Hz
 highPassFunc dt = (\cutoff pulse -> state $ \(prevOut, prevIn) -> 
@@ -102,6 +97,22 @@ highPassFunc dt = (\cutoff pulse -> state $ \(prevOut, prevIn) ->
       next = alpha*pulse +  alpha * (prevOut - prevIn)
     in (next, (next, pulse) ) 
   )
+
+
+-- Should this take delay as a Seconds parameter instead of samples?
+combFilterFunc :: FilterFunc [Pulse] (Float,Int)
+combFilterFunc = (\(strength, delay) pulse -> state $ \history ->
+    let
+      n = length history
+      next = if null history
+              then pulse
+              else pulse + strength * (head history)
+      history' = if n < delay
+                  then history ++ [next]
+                  else (drop (n-delay+1) $ history) ++ [next]
+    in (next, history')
+  )
+
 -- ===============================================
 
 
