@@ -97,7 +97,8 @@ main = do
   -- printMidi "mario2_overworld.mid"
   
   putStrLn $ printf "Playing something"
-  play "pokemon_gs_lavender_town.mid"
+  -- play "pokemon_gs_lavender_town.mid"
+  play "c_major.mid"
   -- playOnabots
   putStrLn $ "made " ++ outputFile
 

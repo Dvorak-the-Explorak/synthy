@@ -29,7 +29,7 @@ data Voice = Voice {
   _voiceOsc :: Oscillator, 
   _voiceVenv :: VolEnv,
   _voiceFiltEnv :: VolEnv,
-  _voiceFilt :: Filter Pulse,
+  _voiceFilt :: Filter Hz,
   _voiceFiltEnvCurve :: (Volume -> Hz), 
   _voiceNote :: NoteNumber
 }
@@ -40,10 +40,9 @@ data Voice = Voice {
 makeFields ''Voice
 
 
--- ========================================================================
+-- =======================================================================
 
 -- #TODO Note off needs to move the filterEnv as well
-
 
 -- #TODO un-hardcode the oscillator type and ADSR values
 defaultMakeVoice :: NoteNumber -> Voice
@@ -70,7 +69,7 @@ defaultVoice = Voice {
         _attackSlope=20, _decaySlope=8, _sustainLevel=0.01, 
         _releaseSlope=1, _currentState=EnvAttack, _volume=0
     },
-    _voiceFilt = Filter {_storage = 0, _cutoff = 400, _filtFunc = lowPass (1/sampleRate)},
+    _voiceFilt = (lowPass (1/sampleRate)) & param .~ 400,
     _voiceFiltEnvCurve = (\v -> 800 + 16000*v),
     _voiceNote = 0
 }
@@ -84,15 +83,21 @@ stepVoice dt = do
   filterFreqOffset <- overState filtEnv $ stepEnv dt
   f <- gets (view filtEnvCurve)
   let filterFreq = f filterFreqOffset
-  modify $ set (filt . cutoff) filterFreq
+  modify $ set (filt . param) filterFreq
 
   -- run the oscillator and the volume envelope
   pulse <- overState osc $ stepOsc dt
   vol <- overState venv $ stepEnv dt
 
-  -- run the filter 
-  f <- gets (view $ filt.filtFunc)
-  output <- overState filt $ (f $ pulse * vol)
+  -- run the filter (old version)
+  -- f <- gets (view $ filt.run)
+
+  -- run the filter
+  _filter <- use filt
+  
+  output <- overState filt $ state $ runFilter (pulse*vol)
+  -- let (output, newFilt) = runFilter (pulse*vol) _filter
+  -- modify $ set filt newFilt
 
   return $ output
 

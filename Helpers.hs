@@ -1,4 +1,7 @@
-{-# LANGUAGE RankNTypes #-}
+{-# 
+    LANGUAGE RankNTypes
+    , MultiParamTypeClasses
+ #-}
 
 module Helpers where
 
