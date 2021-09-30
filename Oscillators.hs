@@ -19,16 +19,16 @@ import Helpers
 
 
 type WaveFunction = Phase -> Pulse
-type Waveform = State Oscillator Pulse
+type OscReader = State Oscillator Pulse
 
 data Oscillator = Oscillator {
-  _wave :: Waveform,
+  _getSample :: OscReader,
   _phase :: Phase,
   _freq :: Hz,
   _waveIndex :: Phase
 }
 
--- makes the lenses, calls the lens for _wave just wave
+-- makes the lenses, calls the lens for _getSample just getSample
 makeLenses ''Oscillator
 
 -- ==========================================
@@ -58,23 +58,23 @@ waveFuncFromSamples vals = \x -> let
 
 -- ==========================================================
 
-makeWaveform :: WaveFunction -> Waveform
-makeWaveform f = uses phase f
+makeOscReader :: WaveFunction -> OscReader
+makeOscReader f = uses phase f
 
 zeroOsc :: Oscillator
 zeroOsc = Oscillator {
-  _wave = makeWaveform $ const 0,
+  _getSample = makeOscReader $ const 0,
   _phase = 0,
   _freq = 0,
   _waveIndex = 0
 }
 
 lfo1s :: Oscillator
-lfo1s = zeroOsc & wave .~ makeWaveform pureTone 
+lfo1s = zeroOsc & getSample .~ makeOscReader pureTone 
                 & freq .~ 1
 
 simpleOsc :: WaveFunction -> Oscillator
-simpleOsc wf = zeroOsc & wave .~ makeWaveform wf
+simpleOsc wf = zeroOsc & getSample .~ makeOscReader wf
 
 sawOsc = simpleOsc sawTone
 squareOsc = simpleOsc squareTone
@@ -87,13 +87,13 @@ sineOsc = simpleOsc pureTone
 
 stepOsc :: Seconds -> State Oscillator Pulse
 stepOsc dt = do
-  wave_ <- use wave
+  getSample_ <- use getSample
   phase_ <- use phase -- `use` is `view` on the state
   freq_ <- use freq
   let newPhase = flip mod' 1.0 $ phase_ + dt*freq_
   assign phase newPhase -- `assign` is `set` on the state
 
-  output <- wave_
+  output <- getSample_
   return $ 0.1 * output
 -- stepOsc dt = state $ \os -> let newPhase = flip mod' 1.0 $ os ^. phase + dt*(os ^. freq)
 --                               in ( (*0.1) $ os ^. wave $ newPhase, os & phase .~ newPhase)
