@@ -38,7 +38,9 @@ import Debug.Trace
 --    TempoChange and TimeDiv to get the speed of songs right
 --    ProgramChange to get different instruments?
 --    Velocity in NoteOn and NoteOff
--- #TODO percussion sounds - white noise
+-- #TODO change how new voices are created in synth (have a template instead of a constructor)
+-- #TODO wavetable Oscillator - make Oscillator._wave just be the step function (and make a peek)
+-- #TODO percussion sounds - white noise as a state thing - add type argument to Oscillator?
 -- #TODO voices with samples - load up a general midi soundfont and use that
 -- #TODO more filters:
 --    Reverb
@@ -69,17 +71,12 @@ performMidiWithSynth :: FullSynth -> Track Ticks -> [Pulse]
 performMidiWithSynth synth track = evalState (synthesiseMidiTrack track) synth
 
 performMidiSaw :: Track Ticks -> [Pulse]
-performMidiSaw = performMidiWithWaveform sawTone
-performMidiSquare = performMidiWithWaveform squareTone
-performMidiSine = performMidiWithWaveform pureTone
+performMidiSaw = performMidiWithOscillator sawOsc
+performMidiSquare = performMidiWithOscillator squareOsc
+performMidiSine = performMidiWithOscillator sineOsc
 
-performMidiWithWaveform :: Waveform -> Track Ticks -> [Pulse]
-performMidiWithWaveform wf = performMidiWithSynth $ over makeVoice ((set (osc.wave) wf) . ) defaultSynth
-
--- performMidiWithOscillator :: Oscillator -> Track Ticks -> [Pulse]
--- -- performMidiWithOscillator osc_  = performMidiWithSynth $ over makeVoice (\f -> (\n -> (f n) & osc .~ osc_)) defaultSynth
--- -- performMidiWithOscillator osc_  = performMidiWithSynth $ over makeVoice (\f -> (set osc osc_) . f) defaultSynth
--- performMidiWithOscillator osc_ = performMidiWithSynth $ over makeVoice ((set osc osc_) . ) defaultSynth
+performMidiWithOscillator :: Oscillator -> Track Ticks -> [Pulse]
+performMidiWithOscillator osc_ = performMidiWithSynth $ defaultSynth & voiceTemplate.osc .~ osc_
 
 -- =====================================================
 -- =====================================================

@@ -16,7 +16,9 @@ import Data.Fixed (mod')
 -- #TODO actually things should be more typeclasses than records? esp. the state operations...
 
 
-type Waveform = Seconds -> Pulse
+type Waveform = Phase -> Pulse
+
+
 data Oscillator = Oscillator {
   _wave :: Waveform,
   _phase :: Phase,

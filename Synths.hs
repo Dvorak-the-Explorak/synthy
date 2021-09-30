@@ -8,7 +8,7 @@
 module Synths where
 
 import General (Seconds, Pulse, sampleRate, Hz)
-import Voices (Voice(..), defaultMakeVoice, stepVoice, releaseVoice, restartVoice, note, venv)
+import Voices (Voice(..), initialiseVoice, defaultVoice, stepVoice, releaseVoice, restartVoice, note, venv)
 import Filters (Filter(..), Filter(..), lowPass, highPass, combFilter, mapFilter, param, runFilter)
 import Helpers (stateMap, overState, mapWhere)
 import MidiStuff (NoteNumber)
@@ -29,7 +29,7 @@ data FullSynth = FullSynth {
   _fullSynthFilt :: Filter (Float, Int),
   _fullSynthLfo :: Oscillator,
   _fullSynthLfoStrength :: Float,
-  _fullSynthMakeVoice :: (NoteNumber -> Voice)
+  _fullSynthVoiceTemplate :: Voice
 }
 
 makeFields ''FullSynth
@@ -68,7 +68,7 @@ noteOnVoicesWith makeVoice noteNum = modify $ \voices ->
       -- revert envelope to state 1
       then restartVoices noteNum voices
       -- add a new voice for that note
-      else (makeVoice noteNum):voices
+      else (makeVoice noteNum ):voices
 
 -- set the envelope of any voices with the corrseponding note to EnvRelease state
 noteOffVoices :: NoteNumber -> State [Voice] ()
@@ -129,8 +129,8 @@ runFullSynth dt | dt < (1.0/sampleRate) = return []
 
 noteOnFullSynth :: NoteNumber -> State FullSynth ()
 noteOnFullSynth note = do
-  make <- gets (view $ makeVoice)
-  overState voices $ noteOnVoicesWith make note
+  newVoice <- use voiceTemplate
+  overState voices $ noteOnVoicesWith (initialiseVoice newVoice) note
 
 noteOffFullSynth :: NoteNumber -> State FullSynth ()
 noteOffFullSynth note = overState voices $ noteOffVoices note
@@ -176,10 +176,10 @@ defaultSynth :: FullSynth
 defaultSynth = FullSynth {
   _fullSynthVoices = ([]), 
   -- _fullSynthFilt = Filter {_storage =0, _cutoff = 800, _filtFunc = highPass (1/sampleRate)},
-  _fullSynthFilt = combFilter & param .~ (0.8, 200),
-  _fullSynthLfo = lfo1s & freq .~ 2,
-  _fullSynthLfoStrength = 200, -- 400 * 10,
-  _fullSynthMakeVoice = defaultMakeVoice
+  _fullSynthFilt = combFilter & param .~ (0.8, 50),
+  _fullSynthLfo = lfo1s & freq .~ 0.5,
+  _fullSynthLfoStrength = 50, -- 400 * 10,
+  _fullSynthVoiceTemplate = defaultVoice
 }
 
 

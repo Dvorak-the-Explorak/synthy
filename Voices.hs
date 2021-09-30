@@ -42,13 +42,9 @@ makeFields ''Voice
 
 -- =======================================================================
 
--- #TODO Note off needs to move the filterEnv as well
-
--- #TODO un-hardcode the oscillator type and ADSR values
-defaultMakeVoice :: NoteNumber -> Voice
-defaultMakeVoice noteNum = defaultVoice  & osc . freq .~ (hzFromNoteNumber noteNum)
-                                      & note .~ noteNum
-
+initialiseVoice :: Voice -> NoteNumber -> Voice
+initialiseVoice v noteNum = v & osc . freq .~ (hzFromNoteNumber noteNum)
+                              & note .~ noteNum
 
 -- #TODO since voice has a NoteNumber, should this take note number and do nothing if they don't match?
 releaseVoice :: Voice -> Voice
