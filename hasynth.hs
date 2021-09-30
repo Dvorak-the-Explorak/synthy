@@ -38,7 +38,6 @@ import Debug.Trace
 --    TempoChange and TimeDiv to get the speed of songs right
 --    ProgramChange to get different instruments?
 --    Velocity in NoteOn and NoteOff
--- #TODO change how new voices are created in synth (have a template instead of a constructor)
 -- #TODO wavetable Oscillator - make Oscillator._wave just be the step function (and make a peek)
 -- #TODO percussion sounds - white noise as a state thing - add type argument to Oscillator?
 -- #TODO voices with samples - load up a general midi soundfont and use that
