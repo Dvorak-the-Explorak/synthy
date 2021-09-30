@@ -21,6 +21,10 @@ rot _ [] = []
 rot 0 xs = xs
 rot n (x:xs) = rot (n-1) $ xs ++ [x]
 
+group :: Int -> [a] -> [[a]]
+group 0 _ = []
+group n xs = take n xs : (group n $ drop n xs)
+
 mapWhere :: (a -> Bool) -> (a -> a) -> [a] -> [a]
 mapWhere p f = map (\x -> if (p x) then f x else x)
 

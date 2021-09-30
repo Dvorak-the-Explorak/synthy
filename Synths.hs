@@ -9,7 +9,7 @@ module Synths where
 
 import General (Seconds, Pulse, sampleRate, Hz)
 import Voices (Voice(..), initialiseVoice, defaultVoice, stepVoice, releaseVoice, restartVoice, note, venv)
-import Filters (Filter(..), Filter(..), lowPass, highPass, combFilter, mapFilter, param, runFilter)
+import Filters (Filter(..), Filter(..), lowPass, highPass, combFilter, hashtagNoFilter, mapFilter, param, runFilter)
 import Helpers (stateMap, overState, mapWhere)
 import MidiStuff (NoteNumber)
 import Envelopes (VolEnv(..), EnvSegment(..), currentState)
@@ -176,7 +176,7 @@ defaultSynth :: FullSynth
 defaultSynth = FullSynth {
   _fullSynthVoices = ([]), 
   -- _fullSynthFilt = Filter {_storage =0, _cutoff = 800, _filtFunc = highPass (1/sampleRate)},
-  _fullSynthFilt = combFilter & param .~ (0.8, 50),
+  _fullSynthFilt = combFilter & param .~ (0, 50),
   _fullSynthLfo = lfo1s & freq .~ 0.5,
   _fullSynthLfoStrength = 50, -- 400 * 10,
   _fullSynthVoiceTemplate = defaultVoice

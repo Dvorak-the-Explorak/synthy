@@ -18,7 +18,7 @@ import Helpers
 -- #TODO actually things should be more typeclasses than records? esp. the state operations...
 
 
-type WaveFunction = Phase -> Pulse
+type Waveform = Phase -> Pulse
 type OscReader = State Oscillator Pulse
 
 data Oscillator = Oscillator {
@@ -34,22 +34,38 @@ makeLenses ''Oscillator
 -- ==========================================
 
 
-pureTone :: WaveFunction
+pureTone :: Waveform
 pureTone = (sin . (*) (2*pi))
 
-sawTone :: WaveFunction
+sawTone :: Waveform
 -- sawTone = (flip (-) 1) . (*2) . (flip mod' 1.0)
 sawTone = \t -> 2 * (t `mod'` 1) - 1
 
-squareTone :: WaveFunction
+squareTone :: Waveform
 squareTone = (\t -> if (t `mod'` 1.0 < 0.5) then -1.0 else 1.0)
 
 
 
 -- ============================================================
 
-waveFuncFromSamples :: [Float] -> WaveFunction
-waveFuncFromSamples vals = \x -> let
+wavetableReader :: Int -> [Float] -> OscReader
+wavetableReader n samples = do
+  waveIndex_ <- use waveIndex
+  phase_ <- use phase
+  return $ wavetableFromSamples n samples waveIndex_ phase_
+
+wavetableFromSamples :: Int -> [Float] -> Float -> Waveform
+wavetableFromSamples n vals waveIndex = \x -> let
+    step = 1.0 / (fromIntegral $ n)
+    i = (floor $ (x/step)) `mod` (length vals)
+    next = (i+1) `mod` n
+    frac = (x - (fromIntegral i)*step)/step
+    waveN = floor $ waveIndex * (fromIntegral $ length vals `div` n)
+  in (vals !! (i+waveN*n)) + frac * ((vals !! (next+waveN*n)) - (vals !! (i+waveN*n)))
+
+
+waveformFromSamples :: [Float] -> Waveform
+waveformFromSamples vals = \x -> let
     step = 1.0 / (fromIntegral $ length vals - 1)
     i = (floor $ (x/step)) `mod` (length vals)
     next = (i+1) `mod` (length vals)
@@ -58,7 +74,7 @@ waveFuncFromSamples vals = \x -> let
 
 -- ==========================================================
 
-makeOscReader :: WaveFunction -> OscReader
+makeOscReader :: Waveform -> OscReader
 makeOscReader f = uses phase f
 
 zeroOsc :: Oscillator
@@ -73,14 +89,15 @@ lfo1s :: Oscillator
 lfo1s = zeroOsc & getSample .~ makeOscReader pureTone 
                 & freq .~ 1
 
-simpleOsc :: WaveFunction -> Oscillator
+simpleOsc :: Waveform -> Oscillator
 simpleOsc wf = zeroOsc & getSample .~ makeOscReader wf
 
 sawOsc = simpleOsc sawTone
 squareOsc = simpleOsc squareTone
 sineOsc = simpleOsc pureTone
 
-
+wavetableOsc :: Int -> [Float] -> Oscillator
+wavetableOsc n samples = zeroOsc & getSample .~  wavetableReader n samples
 
 
 -- ==============================================
@@ -91,7 +108,8 @@ stepOsc dt = do
   phase_ <- use phase -- `use` is `view` on the state
   freq_ <- use freq
   let newPhase = flip mod' 1.0 $ phase_ + dt*freq_
-  assign phase newPhase -- `assign` is `set` on the state
+  -- assign phase newPhase -- `assign` is `set` on the state
+  phase .= newPhase -- operator notation for assign
 
   output <- getSample_
   return $ 0.1 * output

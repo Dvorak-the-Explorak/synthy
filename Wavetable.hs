@@ -3,6 +3,7 @@ module Wavetable where
 import Data.WAVE
 
 import Oscillators
+import General
 
 waveFileDescription :: WAVE -> String
 waveFileDescription wav = (show channels ++ " channels, " 
@@ -15,7 +16,8 @@ waveFileDescription wav = (show channels ++ " channels, "
     bits = waveBitsPerSample $ waveHeader wav
     frames = waveFrames $ waveHeader wav
 
-
+samplesFromWave :: WAVE -> [Pulse]
+samplesFromWave wav = map (realToFrac . sampleToDouble . head) $ waveSamples wav
 -- -- assumes 2048 samples per wave
 -- oscFromWavetable :: WAVE -> Oscillator
 -- oscFromWavetable wav = Oscillator {_wave = waveform, _phase=0, freq=0, _waveIndex=0}

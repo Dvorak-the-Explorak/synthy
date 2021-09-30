@@ -85,16 +85,19 @@ main = do
   -- wavFile <- getBytes 58 Wav.parseWav $ B.readFile "ESW_FM_Grizzly.wav"
   -- raw_wav <- return $ BG.runGet Wav.parseWav $ B.readFile "ESW_FM_Grizzly.wav"
   -- wav <- decodeWaveFile "ESW_FM_Grizzly.wav"
-  -- wav <- getWAVEFile "ESW_FM_Grizzly.wav"
+  wav <- getWAVEFile "ESW_FM_Grizzly.wav"
   -- -- putStrLn $ show $ map (sampleToDouble . head) $ waveSamples wav
-  -- putStrLn $ waveFileDescription wav
+  putStrLn $ waveFileDescription wav
   -- putStrLn "Hello, world"
 
+  let wtOsc = wavetableOsc 2048 $ samplesFromWave wav
   -- printMidi "mario2_overworld.mid"
   
   putStrLn $ printf "Playing something"
   -- play "pokemon_gs_lavender_town.mid"
   play "c_major.mid"
+  -- playWithSynth (defaultSynth & voiceTemplate.osc .~ wtOsc) "c_major.mid"
+  -- playWithSynth (defaultSynth & voiceTemplate.osc .~ wtOsc) "c_major.mid"
   -- playOnabots
   putStrLn $ "made " ++ outputFile
 
@@ -172,7 +175,10 @@ playOnabots = do
       return ()
 
 play :: FilePath -> IO ()
-play inputFile = do
+play inputFile = playWithSynth defaultSynth inputFile
+
+playWithSynth :: FullSynth -> FilePath -> IO ()
+playWithSynth synth inputFile = do
   parsedMidi <- fmap (runParser parseMidi) $ B.readFile inputFile
   case parsedMidi of
     (Left errorString) -> putStrLn errorString
@@ -186,7 +192,7 @@ play inputFile = do
 
       -- pulses = map hardClip $ performToyMidi testSeq2
       -- #TODO interpret the midi TimeDiv and TempoChange messages to work out the time steps
-      let pulsesFromTracks track = performMidi $ map timeScale track
+      let pulsesFromTracks track = performMidiWithSynth synth $ map timeScale track
       let outputs = map pulsesFromTracks $ tracks midi
       let pulses = map (hardClip . sum) $ transpose outputs
 
