@@ -16,7 +16,7 @@ import Control.Lens
 import Control.Lens.Lens
 
 
-import General (Pulse)
+import General (Pulse, Volume)
 
   
 rot :: Int -> [a] -> [a]
@@ -47,7 +47,12 @@ mapWhere p f = map (\x -> if (p x) then f x else x)
 
 
 hardClip :: Pulse -> Pulse
-hardClip = (max (-1.0)) . (min 1.0)
+-- hardClip = (max (-1.0)) . (min 1.0)
+hardClip = hardClipLimit 1
+
+
+hardClipLimit :: Volume -> Pulse -> Pulse
+hardClipLimit lim = (max (-lim)) . (min lim)
 
 -- State things
 -- ==================================

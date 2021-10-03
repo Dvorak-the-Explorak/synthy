@@ -91,10 +91,8 @@ sequenceFiltersPacked packParams getParams (Filter {_filterStorage=s1, _filterPa
 
 -- ================================================================
 
-
 bandPass :: Seconds -> Filter (Hz,Hz)
 bandPass dt = highPass dt ~> lowPass dt
--- bandPass dt = sequenceFilters (highPass dt) (lowPass dt)
 
 centeredBandPass :: Seconds -> Filter (Hz,Hz)
 centeredBandPass dt = let 
@@ -130,6 +128,8 @@ combFilter = Filter {
   _filterRun = combFilterFunc
 }
 
+clipper :: Filter Volume
+clipper = Filter () (1) clipperFunc
 
 -- ================================
 
@@ -169,6 +169,13 @@ combFilterFunc = (\(strength, delay) pulse -> state $ \history ->
                   else (drop (n-delay+1) $ history) ++ [next]
     in (next, history')
   )
+
+
+clipperFunc :: FilterFunc () Volume
+-- clipperFunc = \limit pulse-> state $ \() -> (hardClipLimit limit pulse, ())
+-- clipperFunc = \limit pulse-> return $ hardClipLimit limit pulse 
+-- clipperFunc = return .: hardClipLimit -- no gain
+clipperFunc = \limit ->  return . (/limit) . hardClipLimit limit
 
 -- ===============================================
 
