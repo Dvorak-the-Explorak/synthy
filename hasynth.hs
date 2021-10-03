@@ -90,15 +90,24 @@ main = do
   putStrLn $ waveFileDescription wav
   -- putStrLn "Hello, world"
 
-  let wtOsc = wavetableOsc 2048 $ samplesFromWave wav
-  -- printMidi "mario2_overworld.mid"
+  -- let tab = wavetableFromSamples 2048 $ samplesFromWave wav
+  -- putStrLn $ show $ map (tab 0 . (/100.0)) [0..100]
+  -- putStrLn $ show $ map (tab 0.2 . (/100.0)) [0..100]
+  -- putStrLn $ show $ map (tab 0.4 . (/100.0)) [0..100]
+  -- putStrLn $ show $ map (tab 0.6 . (/100.0)) [0..100]
+  -- putStrLn $ show $ map (tab 0.8 . (/100.0)) [0..100]
+  -- putStrLn $ show $ map (tab 1 . (/100.0)) [0..100]
+
+  let samples = samplesFromWave wav
+  -- putStrLn $ show $ (minimum samples, maximum samples)
+
+
+  -- let someOsc = simpleOsc $ waveformFromSamples $ take 2048 $ drop (2048*50) samples 
+  let wtOsc = wavetableOsc $ loadWavetable 2048 wav
   
-  putStrLn $ printf "Playing something"
-  -- play "pokemon_gs_lavender_town.mid"
-  play "c_major.mid"
-  -- playWithSynth (defaultSynth & voiceTemplate.osc .~ wtOsc) "c_major.mid"
-  -- playWithSynth (defaultSynth & voiceTemplate.osc .~ wtOsc) "c_major.mid"
-  -- playOnabots
+  let midiFile = "c_major.mid"
+  putStrLn $ printf $ "Playing " ++ midiFile
+  playWithSynth (defaultSynth & voiceTemplate.osc .~ wtOsc) midiFile
   putStrLn $ "made " ++ outputFile
 
 

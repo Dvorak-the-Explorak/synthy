@@ -7,6 +7,7 @@ module Helpers where
 
 import Prelude hiding (unzip)
 import Control.Monad.State
+import Control.Monad.Reader
 import Data.Tuple.Extra
 import Control.Functor.HT (unzip)
 import Control.Lens
@@ -23,6 +24,7 @@ rot n (x:xs) = rot (n-1) $ xs ++ [x]
 
 group :: Int -> [a] -> [[a]]
 group 0 _ = []
+group _ [] = []
 group n xs = take n xs : (group n $ drop n xs)
 
 mapWhere :: (a -> Bool) -> (a -> a) -> [a] -> [a]

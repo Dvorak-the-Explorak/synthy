@@ -8,12 +8,12 @@
 module Synths where
 
 import General (Seconds, Pulse, sampleRate, Hz)
-import Voices (Voice(..), initialiseVoice, defaultVoice, stepVoice, releaseVoice, restartVoice, note, venv)
+import Voices (Voice(..), initialiseVoice, defaultVoice, stepVoice, releaseVoice, restartVoice, note, venv, osc)
 import Filters (Filter(..), Filter(..), lowPass, highPass, combFilter, hashtagNoFilter, mapFilter, param, runFilter)
 import Helpers (stateMap, overState, mapWhere)
 import MidiStuff (NoteNumber)
 import Envelopes (VolEnv(..), EnvSegment(..), currentState)
-import Oscillators (Oscillator, zeroOsc, lfo1s, stepOsc, freq)
+import Oscillators (Oscillator, zeroOsc, lfo1s, stepOsc, freq, waveIndex)
 
 import Control.Monad.State
 import Control.Lens
@@ -80,7 +80,8 @@ noteOffVoices noteNum = modify $ releaseVoices noteNum
 stepFullSynth :: Seconds -> State FullSynth Pulse
 stepFullSynth dt  = do
   -- step the [Voice]
-  pulse <- overState voices $ stepVoices dt
+  -- give some headroom
+  pulse <- fmap (*0.1) $ overState voices $ stepVoices dt
   
   -- run the LFO
   -- #TODO Oh no I don't have dt in this function. Lets get rid of dt and leave it as a global constant?
@@ -89,7 +90,8 @@ stepFullSynth dt  = do
 
   -- modulate the filter cutoff with the LFO
   modify $ over (filt.param._2) (\x -> x+(floor $ moduland*strength))
-
+  -- modulate wavetable indices
+  modify $ over voices $ map (osc.waveIndex .~ (moduland+1)/2)
 
   -- -- get the filter
   -- _filt <- gets (view $ filt . filtFunc)
@@ -177,7 +179,7 @@ defaultSynth = FullSynth {
   _fullSynthVoices = ([]), 
   -- _fullSynthFilt = Filter {_storage =0, _cutoff = 800, _filtFunc = highPass (1/sampleRate)},
   _fullSynthFilt = combFilter & param .~ (0, 50),
-  _fullSynthLfo = lfo1s & freq .~ 0.5,
+  _fullSynthLfo = lfo1s & freq .~ 1,
   _fullSynthLfoStrength = 50, -- 400 * 10,
   _fullSynthVoiceTemplate = defaultVoice
 }

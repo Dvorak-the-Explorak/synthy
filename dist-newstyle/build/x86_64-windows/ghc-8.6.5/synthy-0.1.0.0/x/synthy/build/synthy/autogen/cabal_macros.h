@@ -121,6 +121,17 @@
   (major1) == 0 && (major2) == 0 && (minor) <= 16)
 #endif /* MIN_VERSION_utility_ht */
 
+/* package vector-0.12.3.0 */
+#ifndef VERSION_vector
+#define VERSION_vector "0.12.3.0"
+#endif /* VERSION_vector */
+#ifndef MIN_VERSION_vector
+#define MIN_VERSION_vector(major1,major2,minor) (\
+  (major1) <  0 || \
+  (major1) == 0 && (major2) <  12 || \
+  (major1) == 0 && (major2) == 12 && (minor) <= 3)
+#endif /* MIN_VERSION_vector */
+
 /* tool alex-3.2.4 */
 #ifndef TOOL_VERSION_alex
 #define TOOL_VERSION_alex "3.2.4"

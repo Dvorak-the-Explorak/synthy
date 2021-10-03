@@ -1,9 +1,17 @@
+{-#  LANGUAGE BangPatterns 
+#-}
+
 module Wavetable where
 
 import Data.WAVE
+import qualified Data.Vector as V
 
-import Oscillators
 import General
+import Helpers
+
+import Debug.Trace
+
+type Wavetable = V.Vector (V.Vector Pulse)
 
 waveFileDescription :: WAVE -> String
 waveFileDescription wav = (show channels ++ " channels, " 
@@ -18,8 +26,10 @@ waveFileDescription wav = (show channels ++ " channels, "
 
 samplesFromWave :: WAVE -> [Pulse]
 samplesFromWave wav = map (realToFrac . sampleToDouble . head) $ waveSamples wav
--- -- assumes 2048 samples per wave
--- oscFromWavetable :: WAVE -> Oscillator
--- oscFromWavetable wav = Oscillator {_wave = waveform, _phase=0, freq=0, _waveIndex=0}
---   where
---     waveform = 
+
+
+-- #TODO make wavetable just a function, so that Oscillators.hs doesn't need to know if it's vector or list
+loadWavetable :: Int -> WAVE -> Wavetable
+loadWavetable n wav = let groups = group n $ samplesFromWave wav
+                          vectors = map V.fromList $ filter ((==n) . length) groups
+                      in V.fromList vectors

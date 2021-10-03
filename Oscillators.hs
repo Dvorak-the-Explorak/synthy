@@ -2,24 +2,30 @@
            , MultiParamTypeClasses
            , TemplateHaskell
            , TypeSynonymInstances
+           , BangPatterns
   #-}
 
 module Oscillators where
 
 import Control.Monad.State
+import Control.Monad.Reader
 import Control.Lens
+import Data.Vector ((!))
+import qualified Data.Vector as V
 
 import General (Phase, Pulse, Hz, Seconds)
 import Data.Fixed (mod')
-
+import Wavetable (Wavetable)
 import Helpers
+
+import Debug.Trace
 
 -- #TODO add stepOsc as a record field
 -- #TODO actually things should be more typeclasses than records? esp. the state operations...
 
 
 type Waveform = Phase -> Pulse
-type OscReader = State Oscillator Pulse
+type OscReader = Phase -> Phase -> Pulse
 
 data Oscillator = Oscillator {
   _getSample :: OscReader,
@@ -47,21 +53,16 @@ squareTone = (\t -> if (t `mod'` 1.0 < 0.5) then -1.0 else 1.0)
 
 
 -- ============================================================
-
-wavetableReader :: Int -> [Float] -> OscReader
-wavetableReader n samples = do
-  waveIndex_ <- use waveIndex
-  phase_ <- use phase
-  return $ wavetableFromSamples n samples waveIndex_ phase_
-
-wavetableFromSamples :: Int -> [Float] -> Float -> Waveform
-wavetableFromSamples n vals waveIndex = \x -> let
-    step = 1.0 / (fromIntegral $ n)
-    i = (floor $ (x/step)) `mod` (length vals)
-    next = (i+1) `mod` n
-    frac = (x - (fromIntegral i)*step)/step
-    waveN = floor $ waveIndex * (fromIntegral $ length vals `div` n)
-  in (vals !! (i+waveN*n)) + frac * ((vals !! (next+waveN*n)) - (vals !! (i+waveN*n)))
+                                   
+wavetableReader :: Wavetable -> OscReader
+wavetableReader table = \waveIndex_ phase_ -> let 
+    samplesPerWave = V.length $ V.head table
+    numWaves = V.length table
+    i = min (floor $ phase_ * fromIntegral samplesPerWave) (samplesPerWave-1)
+    waveN = min (floor $ waveIndex_ * (fromIntegral numWaves)) (numWaves - 1)
+  in if V.null table 
+      then 0
+      else (table ! waveN) ! i
 
 
 waveformFromSamples :: [Float] -> Waveform
@@ -75,7 +76,7 @@ waveformFromSamples vals = \x -> let
 -- ==========================================================
 
 makeOscReader :: Waveform -> OscReader
-makeOscReader f = uses phase f
+makeOscReader f =  const f -- ignore first argument (waveIndex)
 
 zeroOsc :: Oscillator
 zeroOsc = Oscillator {
@@ -96,8 +97,8 @@ sawOsc = simpleOsc sawTone
 squareOsc = simpleOsc squareTone
 sineOsc = simpleOsc pureTone
 
-wavetableOsc :: Int -> [Float] -> Oscillator
-wavetableOsc n samples = zeroOsc & getSample .~  wavetableReader n samples
+wavetableOsc :: Wavetable -> Oscillator
+wavetableOsc table = zeroOsc & getSample .~ wavetableReader table
 
 
 -- ==============================================
@@ -111,8 +112,9 @@ stepOsc dt = do
   -- assign phase newPhase -- `assign` is `set` on the state
   phase .= newPhase -- operator notation for assign
 
-  output <- getSample_
-  return $ 0.1 * output
+  waveIndex_ <- use waveIndex
+  let output = getSample_ waveIndex_ newPhase
+  return  output
 -- stepOsc dt = state $ \os -> let newPhase = flip mod' 1.0 $ os ^. phase + dt*(os ^. freq)
 --                               in ( (*0.1) $ os ^. wave $ newPhase, os & phase .~ newPhase)
 

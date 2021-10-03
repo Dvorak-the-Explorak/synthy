@@ -77,9 +77,9 @@ stepVoice dt = do
   -- #TODO Combine the Filter properties into one data type
   -- #TODO Turn this section into a stepFilterEnv stateOp
   filterFreqOffset <- overState filtEnv $ stepEnv dt
-  f <- gets (view filtEnvCurve)
+  f <- use filtEnvCurve
   let filterFreq = f filterFreqOffset
-  modify $ set (filt . param) filterFreq
+  filt.param .= filterFreq
 
   -- run the oscillator and the volume envelope
   pulse <- overState osc $ stepOsc dt
