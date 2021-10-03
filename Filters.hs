@@ -131,6 +131,17 @@ combFilter = Filter {
 clipper :: Filter Volume
 clipper = Filter () (1) clipperFunc
 
+pureFilter :: (Pulse -> Pulse) -> Filter ()
+pureFilter f = Filter () () (const $ return . f)
+
+-- cubicFilter :: Filter ()
+-- cubicFilter = pureFilter (**3)
+cubicFilter :: Filter Hz
+cubicFilter = Filter () 1 (\strength pulse -> return $ strength*pulse**3 + (1-strength)*pulse)
+
+gainFilter :: Filter Float
+gainFilter = Filter () 1 (\gain -> return . (*gain)) 
+
 -- ================================
 
 hashtagNoFilterFunc :: FilterFunc () a

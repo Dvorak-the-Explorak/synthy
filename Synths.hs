@@ -79,8 +79,7 @@ noteOffVoices noteNum = modify $ releaseVoices noteNum
 stepFullSynth :: Seconds -> State FullSynth Pulse
 stepFullSynth dt  = do
   -- step the [Voice]
-  -- give some headroom 
-  pulse <- fmap (*0.1) $ overState voices $ stepVoices dt
+  pulse <- overState voices $ stepVoices dt
   
   -- run the LFO
   moduland <- overState lfo $ stepOsc dt
@@ -100,7 +99,8 @@ stepFullSynth dt  = do
   -- unmodulate the filter cutoff
   filt.param -= strength*moduland
 
-  return output
+  -- give some headroom 
+  return $ 0.1*output
 
 runFullSynthANiente :: Seconds -> State FullSynth [Pulse]
 runFullSynthANiente dt = do
@@ -167,10 +167,10 @@ defaultSynth = FullSynth {
   -- _fullSynthFilt = bandPass (1/sampleRate) & param .~ (220, 880),--param is (low, high)
   -- _fullSynthFilt = centeredBandPass (1/sampleRate) & param .~ (440, 220),--param is (center, width)
   -- _fullSynthFilt = lowPass (1/sampleRate) & param .~ 440,--param is cutoff frequency
-  _fullSynthFilt = clipper & param .~ 0.06,--param is clip limit
+  _fullSynthFilt = cubicFilter & param .~ 0.8,--param is clip limit
   -- _fullSynthFilt = hashtagNoFilter (0,0),
   _fullSynthLfo = lfo1s & freq .~ 0.4,
-  _fullSynthLfoStrength = 0.04, -- 400 * 10,
+  _fullSynthLfoStrength = 0.2, -- 400 * 10,
   _fullSynthVoiceTemplate = defaultVoice
 }
 
