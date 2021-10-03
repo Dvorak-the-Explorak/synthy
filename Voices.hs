@@ -86,7 +86,7 @@ stepVoice dt = do
   vol <- overState venv $ stepEnv dt
 
   -- run the filter
-  output <- overState filt $ state $ runFilter (pulse*vol)
+  output <- overState filt $ runFilter (pulse*vol)
 
   return $ output
 

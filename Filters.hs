@@ -32,11 +32,25 @@ type FilterFunc s a = (a -> Pulse -> State s Pulse)
 makeFields ''Filter
 
 
--- so much for records and lenses taking the mess out of it
---  I can't even goddamn look at this, and it's barely a line of lenses
-runFilter pulse (Filter {_filterStorage=store, _filterParam=param, _filterRun=run}) = let
-  (output, newStore) = runState (run param pulse) store
-  in (output, Filter {_filterStorage=newStore, _filterParam=param, _filterRun=run})
+-- -- so much for records and lenses taking the mess out of it
+-- --  I can't even goddamn look at this, and it's barely a line of lenses
+-- runFilter pulse (Filter {_filterStorage=store, _filterParam=param, _filterRun=run}) = let
+--   (output, newStore) = runState (run param pulse) store
+--   in (output, Filter {_filterStorage=newStore, _filterParam=param, _filterRunn=run})
+
+
+-- This is made slightly messier because we can't use record accesors or record updates
+--  means lenses don't work either, have to make the whole record at once / pattern match
+runFilter :: Pulse -> State (Filter a) Pulse
+runFilter pulse = state $ \(Filter s param run) -> let 
+    (output, s') = runState (run param pulse) s
+  in (output, Filter s' param run)
+
+-- apply a function to the filter output
+mapFilterOutput :: (Pulse -> Pulse) -> Filter a -> Filter a
+mapFilterOutput f (Filter {_filterStorage=s, _filterParam=p, _filterRun=r}) = let 
+    r' = \p' pulse -> fmap f (r p' pulse)
+  in (Filter {_filterStorage=s, _filterParam=p, _filterRun=r'})    
 
 (~>) :: Filter a -> Filter b -> Filter (a,b)
 (~>) = sequenceFiltersPacked id id
@@ -48,9 +62,14 @@ runFilter pulse (Filter {_filterStorage=store, _filterParam=param, _filterRun=ru
 (*>) = parallelFilters (*)
 
 
+
+
+
 parallelFilters :: (Pulse -> Pulse -> Pulse) -> Filter a -> Filter b -> Filter (a,b)
 parallelFilters f = parallelFiltersPacked f id id
 
+
+-- packs and unpacks the parameters to a different form
 parallelFiltersPacked :: (Pulse -> Pulse -> Pulse) -> ((a,b) -> c) -> (c -> (a,b)) -> Filter a -> Filter b -> Filter c
 parallelFiltersPacked f packParams getParams (Filter {_filterStorage=s1, _filterParam=p1, _filterRun=r1}) (Filter {_filterStorage=s2, _filterParam=p2, _filterRun=r2}) = let    
     r = \p' pulse -> 
@@ -76,7 +95,10 @@ sequenceFiltersPacked packParams getParams (Filter {_filterStorage=s1, _filterPa
             in (out2, (newS1, newS2))
   in (Filter {_filterStorage=(s1,s2), _filterParam= packParams (p1,p2), _filterRun=r})
 
+
+
 -- ================================================================
+
 
 bandPass :: Seconds -> Filter (Hz,Hz)
 bandPass dt = highPass dt ~> lowPass dt

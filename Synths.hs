@@ -15,6 +15,7 @@ import MidiStuff (NoteNumber)
 import Envelopes (VolEnv(..), EnvSegment(..), currentState)
 import Oscillators (Oscillator, zeroOsc, lfo1s, stepOsc, freq, waveIndex)
 
+
 import Control.Monad.State
 import Control.Lens
 import Debug.Trace
@@ -33,7 +34,7 @@ import Codec.Midi
 -- }
 data FullSynth = FullSynth {
   _fullSynthVoices :: [Voice], 
-  _fullSynthFilt :: Filter (Hz, Hz),
+  _fullSynthFilt :: Filter Hz,
   _fullSynthLfo :: Oscillator,
   _fullSynthLfoStrength :: Float,
   _fullSynthVoiceTemplate :: Voice
@@ -97,8 +98,9 @@ stepFullSynth dt  = do
 
   -- modulate the filter cutoff with the LFO
   -- modify $ over (filt.param._2) (\x -> x+(floor $ strength*moduland))
-  modify $ over (filt.param._1) (\x -> x * strength**moduland)
-  modify $ over (filt.param._2) (\x -> x * strength**moduland)
+  -- modify $ over (filt.param._1) (\x -> x * strength**moduland)
+  -- modify $ over (filt.param._2) (\x -> x * strength**moduland)
+  modify $ over (filt.param) (\x -> x * strength**moduland)
   -- modulate wavetable indices
   -- modify $ over voices $ map (osc.waveIndex .~ (moduland+1)/2)
 
@@ -107,14 +109,18 @@ stepFullSynth dt  = do
   -- -- run the filter to get the output
   -- output <- overState filt $ _filt pulse
 
-  _filter <- use filt
-  let (output, newFilt) = runFilter pulse _filter
-  modify $ set filt newFilt 
+
+  -- _filter <- use filt
+  -- let (output, newFilt) = runFilter pulse _filter
+  -- modify $ set filt newFilt 
+
+  output <- overState filt $ runFilter pulse
 
   -- unmodulate the filter cutoff
   -- modify $ over (filt.param._2) (\x -> x-(floor $ moduland*strength))
-  modify $ over (filt.param._1) (\x -> x / strength**moduland)
-  modify $ over (filt.param._2) (\x -> x / strength**moduland)
+  -- modify $ over (filt.param._1) (\x -> x / strength**moduland)
+  -- modify $ over (filt.param._2) (\x -> x / strength**moduland)
+  modify $ over (filt.param) (\x -> x / strength**moduland)
 
   return output
 
@@ -180,10 +186,11 @@ defaultSynth :: FullSynth
 defaultSynth = FullSynth {
   _fullSynthVoices = ([]), 
   -- _fullSynthFilt = bandPass (1/sampleRate) & param .~ (220, 880),--param is (low, high)
-  _fullSynthFilt = centeredBandPass (1/sampleRate) & param .~ (440, 220),--param is (center, width)
+  -- _fullSynthFilt = centeredBandPass (1/sampleRate) & param .~ (440, 220),--param is (center, width)
+  _fullSynthFilt = lowPass (1/sampleRate) & param .~ 440,--param is notch frequency
   -- _fullSynthFilt = hashtagNoFilter (0,0),
   _fullSynthLfo = lfo1s & freq .~ 1,
-  _fullSynthLfoStrength = 4, -- 400 * 10,
+  _fullSynthLfoStrength = 10, -- 400 * 10,
   _fullSynthVoiceTemplate = defaultVoice
 }
 
