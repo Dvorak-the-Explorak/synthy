@@ -38,7 +38,7 @@ import Debug.Trace
 --    TempoChange and TimeDiv to get the speed of songs right
 --    ProgramChange to get different instruments?
 --    Velocity in NoteOn and NoteOff
--- #TODO wavetable Oscillator - make Oscillator._wave just be the step function (and make a peek)
+-- #TODO noteOff every voice at the end of a midi file, run until all voices are gone
 -- #TODO percussion sounds - white noise as a state thing - add type argument to Oscillator?
 -- #TODO voices with samples - load up a general midi soundfont and use that
 -- #TODO more filters:
@@ -107,7 +107,8 @@ main = do
   
   let midiFile = "c_major.mid"
   putStrLn $ printf $ "Playing " ++ midiFile
-  playWithSynth (defaultSynth & voiceTemplate.osc .~ wtOsc) midiFile
+  -- playWithSynth (defaultSynth & voiceTemplate.osc .~ wtOsc) midiFile
+  playWithSynth (defaultSynth ) midiFile
   putStrLn $ "made " ++ outputFile
 
 

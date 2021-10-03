@@ -1,6 +1,8 @@
 {-# 
     LANGUAGE RankNTypes
     , MultiParamTypeClasses
+    , FlexibleInstances
+    , ExistentialQuantification
  #-}
 
 module Helpers where
