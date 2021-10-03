@@ -70,16 +70,19 @@ defaultVoice = Voice {
     _voiceNote = 0
 }
 
+  -- run the filter envelope and update the filter frequency
+stepFilterEnv :: Seconds -> State Voice ()
+stepFilterEnv dt = do
+  filterFreqOffset <- overState filtEnv $ stepEnv dt
+  f <- use filtEnvCurve
+  filt.param .= f filterFreqOffset
+
 
 stepVoice :: Seconds -> State Voice Pulse
 stepVoice dt = do
+
   -- run the filter envelope and update the filter frequency
-  -- #TODO Combine the Filter properties into one data type
-  -- #TODO Turn this section into a stepFilterEnv stateOp
-  filterFreqOffset <- overState filtEnv $ stepEnv dt
-  f <- use filtEnvCurve
-  let filterFreq = f filterFreqOffset
-  filt.param .= filterFreq
+  stepFilterEnv dt
 
   -- run the oscillator and the volume envelope
   pulse <- overState osc $ stepOsc dt

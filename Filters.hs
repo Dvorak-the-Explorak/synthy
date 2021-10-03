@@ -31,14 +31,6 @@ type FilterFunc s a = (a -> Pulse -> State s Pulse)
 -- makes the lenses, calls the lens for _filterStorage just storage
 makeFields ''Filter
 
-
--- -- so much for records and lenses taking the mess out of it
--- --  I can't even goddamn look at this, and it's barely a line of lenses
--- runFilter pulse (Filter {_filterStorage=store, _filterParam=param, _filterRun=run}) = let
---   (output, newStore) = runState (run param pulse) store
---   in (output, Filter {_filterStorage=newStore, _filterParam=param, _filterRunn=run})
-
-
 -- This is made slightly messier because we can't use record accesors or record updates
 --  means lenses don't work either, have to make the whole record at once / pattern match
 runFilter :: Pulse -> State (Filter a) Pulse
