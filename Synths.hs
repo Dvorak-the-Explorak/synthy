@@ -10,7 +10,7 @@ module Synths where
 import General (Seconds, Pulse, sampleRate, Hz)
 import Voices (Voice(..), initialiseVoice, defaultVoice, stepVoice, releaseVoice, restartVoice, note, venv, osc)
 import Filters
-import Helpers (stateMap, overState, mapWhere)
+import Helpers (stateMap, overState, mapWhere, iterateState, iterateStateUntil)
 import MidiStuff (NoteNumber)
 import Envelopes (VolEnv(..), EnvSegment(..), currentState)
 import Oscillators (Oscillator, zeroOsc, lfo1s, stepOsc, freq, waveIndex)
@@ -42,11 +42,12 @@ stepVoices dt = do
 
 -- #TODO this isn't actually "running", just iterating steps
 runVoicesSteps :: Int -> Seconds -> State [Voice] [Pulse]
-runVoicesSteps 0 dt = return []
-runVoicesSteps n dt = do
-  pulse <- stepVoices dt
-  pulses <- runVoicesSteps (n-1) dt
-  return (pulse:pulses)
+-- runVoicesSteps 0 dt = return []
+-- runVoicesSteps n dt = do
+--   pulse <- stepVoices dt
+--   pulses <- runVoicesSteps (n-1) dt
+--   return (pulse:pulses)
+runVoicesSteps n dt = iterateState n (stepVoices dt)
 
 
 cullVoices :: State [Voice] ()
@@ -72,7 +73,6 @@ noteOnVoicesWith makeVoice noteNum = modify $ \voices ->
 -- set the envelope of any voices with the corrseponding note to EnvRelease state
 noteOffVoices :: NoteNumber -> State [Voice] ()
 noteOffVoices noteNum = modify $ releaseVoices noteNum 
-
 
 -- ===================================================================================
 
@@ -104,21 +104,17 @@ stepFullSynth dt  = do
 
 runFullSynthANiente :: Seconds -> State FullSynth [Pulse]
 runFullSynthANiente dt = do
-  finished <- uses voices null
-  if finished 
-    then return []
-    else do
-      pulse <- (stepFullSynth dt)
-      fmap (pulse:) $ runFullSynthANiente dt
+  noteOffAllFullSynth
+  iterateStateUntil (uses voices null) (stepFullSynth dt)
 
 runFullSynthSteps :: Int -> Seconds -> State FullSynth [Pulse]
-runFullSynthSteps 0 dt = return []
-runFullSynthSteps n dt = do
-  pulse <- stepFullSynth dt
-  pulses <- runFullSynthSteps (n-1) dt
-  return (pulse:pulses)
+-- runFullSynthSteps 0 dt = return []
+-- runFullSynthSteps n dt = do
+--   pulse <- stepFullSynth dt
+--   pulses <- runFullSynthSteps (n-1) dt
+--   return (pulse:pulses)
+runFullSynthSteps n dt = iterateState n (stepFullSynth dt)
 
--- #TODO handle midi timing with fractional samples
 -- Chunks the timestep into at most 1 second long chunks
 --    this helps when voices end early,
 --    as they're only culled once per call to runSynthSteps
@@ -143,28 +139,22 @@ noteOnFullSynth note = do
 noteOffFullSynth :: NoteNumber -> State FullSynth ()
 noteOffFullSynth note = overState voices $ noteOffVoices note
 
+noteOffAllFullSynth :: State FullSynth ()
+noteOffAllFullSynth = voices.each %= releaseVoice
+
 
 -- ================================================================================
 
 
 synthesiseMidiTrack :: Track Ticks -> State FullSynth [Pulse]
 synthesiseMidiTrack [] = runFullSynthANiente (1/sampleRate)
-synthesiseMidiTrack ((ticks, NoteOn ch key vel):messages) = 
-  if vel == 0 
-    then synthesiseMidiTrack ((ticks, NoteOff ch key vel):messages)
-    else do 
-      output <- runFullSynthSteps ticks (1/sampleRate)
-      noteOnFullSynth key
-      voices <- gets (view voices)
-      remainder <- synthesiseMidiTrack messages
-      return $ output ++ remainder
-synthesiseMidiTrack ((ticks, NoteOff {key=key}):messages) = do
-    output <- runFullSynthSteps ticks (1/sampleRate)
-    noteOffFullSynth key 
-    remainder <- synthesiseMidiTrack messages
-    return $ output ++ remainder
 synthesiseMidiTrack ((ticks, message):messages) = do
     output <- runFullSynthSteps ticks (1/sampleRate)
+    case message of
+      NoteOff ch key vel -> noteOffFullSynth key 
+      NoteOn ch key 0 -> noteOffFullSynth key 
+      NoteOn ch key vel -> noteOnFullSynth key
+      _ -> return ()
     remainder <- synthesiseMidiTrack messages
     return $ output ++ remainder
 -- ==============================================================================

@@ -87,6 +87,25 @@ injectWith :: Functor f => (f a -> a) -> State s a -> State (f s) a
 injectWith combine op = state $ first combine . unzip . fmap (runState op)
 
 
+iterateStateUntil :: State s Bool -> State s a -> State s [a]
+iterateStateUntil cond op = do
+  done <- cond
+  if done 
+    then return []
+    else do
+      x <- op
+      xs <- iterateStateUntil cond op
+      return $ x:xs
+
+iterateState :: Int -> State s a -> State s [a]
+iterateState 0 _ = return []
+iterateState n op = do
+  x <- op
+  xs <- iterateState (n-1) op
+  return $ x:xs
+
+
+
 -- ==================================
 
 -- mapLens :: Lens' s a -> Lens' [s] [a]
