@@ -38,7 +38,6 @@ import Debug.Trace
 --    TempoChange and TimeDiv to get the speed of songs right
 --    ProgramChange to get different instruments?
 --    Velocity in NoteOn and NoteOff
--- #TODO noteOff every voice at the end of a midi file, run until all voices are gone
 -- #TODO percussion sounds - white noise as a state thing - add type argument to Oscillator?
 -- #TODO voices with samples - load up a general midi soundfont and use that
 -- #TODO more filters:

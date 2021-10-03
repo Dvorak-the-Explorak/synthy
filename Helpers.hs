@@ -45,7 +45,6 @@ mapWhere p f = map (\x -> if (p x) then f x else x)
 -- lovely
 
 
-
 hardClip :: Pulse -> Pulse
 -- hardClip = (max (-1.0)) . (min 1.0)
 hardClip = hardClipLimit 1
@@ -86,3 +85,19 @@ injectState op = state $ unzip . fmap (runState op)
 
 injectWith :: Functor f => (f a -> a) -> State s a -> State (f s) a
 injectWith combine op = state $ first combine . unzip . fmap (runState op)
+
+
+-- ==================================
+
+-- mapLens :: Lens' s a -> Lens' [s] [a]
+-- mapLens l = lens get_ set_
+--   where
+--     -- get_ :: [s] -> [a]    
+--     -- get l :: s -> a
+--     get_ = map (get l)
+--     -- set_ :: [s] -> [a] -> [s]
+--     -- set l :: s -> a -> s
+--     -- map (set l) :: [s] -> [a -> s]
+--     -- something :: [a -> s] -> [a] -> [s]
+--     set_ ss as = zipWith ($) (map (set l) ss) as
+

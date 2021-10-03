@@ -22,16 +22,7 @@ import Debug.Trace
 
 import Codec.Midi
 
--- type VoicedSynth = ([Voice])
-
 -- FullSynth is just a [Voice] with a global filter, modulated by LFO
--- data FullSynth = FullSynth {
---   _fullSynthVoices :: [Voice], 
---   _fullSynthFilt :: Filter (Float, Int),
---   _fullSynthLfo :: Oscillator,
---   _fullSynthLfoStrength :: Float,
---   _fullSynthVoiceTemplate :: Voice
--- }
 data FullSynth = FullSynth {
   _fullSynthVoices :: [Voice], 
   _fullSynthFilt :: Filter Hz,
@@ -92,28 +83,33 @@ stepFullSynth dt  = do
   pulse <- fmap (*0.1) $ overState voices $ stepVoices dt
   
   -- run the LFO
-  -- #TODO Oh no I don't have dt in this function. Lets get rid of dt and leave it as a global constant?
   moduland <- overState lfo $ stepOsc dt
   strength <- gets (view lfoStrength)
 
   -- modulate the filter cutoff with the LFO
-  -- modify $ over (filt.param._2) (\x -> x+(floor $ strength*moduland))
-  -- modify $ over (filt.param._1) (\x -> x * strength**moduland)
-  -- modify $ over (filt.param._2) (\x -> x * strength**moduland)
-  modify $ over (filt.param) (\x -> x + strength*moduland)
+  filt.param += strength*moduland
+
   -- modulate wavetable indices
   -- modify $ over voices $ map (osc.waveIndex .~ (moduland+1)/2)
+  -- voices %= map (osc.waveIndex .~ (moduland+1)/2)
+  voices.each.osc.waveIndex .= (moduland+1)/2
 
   -- -- run the filter to get the output
   output <- overState filt $ runFilter pulse
 
   -- unmodulate the filter cutoff
-  -- modify $ over (filt.param._2) (\x -> x-(floor $ moduland*strength))
-  -- modify $ over (filt.param._1) (\x -> x / strength**moduland)
-  -- modify $ over (filt.param._2) (\x -> x / strength**moduland)
-  modify $ over (filt.param) (\x -> x - strength*moduland)
+  filt.param -= strength*moduland
 
   return output
+
+runFullSynthANiente :: Seconds -> State FullSynth [Pulse]
+runFullSynthANiente dt = do
+  finished <- uses voices null
+  if finished 
+    then return []
+    else do
+      pulse <- (stepFullSynth dt)
+      fmap (pulse:) $ runFullSynthANiente dt
 
 runFullSynthSteps :: Int -> Seconds -> State FullSynth [Pulse]
 runFullSynthSteps 0 dt = return []
@@ -137,6 +133,8 @@ runFullSynth dt | dt < (1.0/sampleRate) = return []
                 | otherwise = let n = floor $ dt*sampleRate
                           in runFullSynthSteps n (1.0/sampleRate)
 
+
+
 noteOnFullSynth :: NoteNumber -> State FullSynth ()
 noteOnFullSynth note = do
   newVoice <- use voiceTemplate
@@ -150,7 +148,7 @@ noteOffFullSynth note = overState voices $ noteOffVoices note
 
 
 synthesiseMidiTrack :: Track Ticks -> State FullSynth [Pulse]
-synthesiseMidiTrack [] = return []
+synthesiseMidiTrack [] = runFullSynthANiente (1/sampleRate)
 synthesiseMidiTrack ((ticks, NoteOn ch key vel):messages) = 
   if vel == 0 
     then synthesiseMidiTrack ((ticks, NoteOff ch key vel):messages)
