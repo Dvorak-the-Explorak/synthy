@@ -136,7 +136,7 @@ pureFilter f = Filter () () (const $ return . f)
 
 -- cubicFilter :: Filter ()
 -- cubicFilter = pureFilter (**3)
-cubicFilter :: Filter Hz
+cubicFilter :: Filter Float
 cubicFilter = Filter () 1 (\strength pulse -> return $ strength*pulse**3 + (1-strength)*pulse)
 
 gainFilter :: Filter Float

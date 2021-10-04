@@ -10,8 +10,6 @@ module Oscillators where
 import Control.Monad.State
 import Control.Monad.Reader
 import Control.Lens
-import Data.Vector ((!))
-import qualified Data.Vector as V
 
 import General (Phase, Pulse, Hz, Seconds)
 import Data.Fixed (mod')
@@ -39,7 +37,6 @@ makeLenses ''Oscillator
 
 -- ==========================================
 
-
 pureTone :: Waveform
 pureTone = (sin . (*) (2*pi))
 
@@ -50,20 +47,11 @@ sawTone = \t -> 2 * (t `mod'` 1) - 1
 squareTone :: Waveform
 squareTone = (\t -> if (t `mod'` 1.0 < 0.5) then -1.0 else 1.0)
 
-
-
 -- ============================================================
-                                   
-wavetableReader :: Wavetable -> OscReader
-wavetableReader table = \waveIndex_ phase_ -> let 
-    samplesPerWave = V.length $ V.head table
-    numWaves = V.length table
-    i = min (floor $ phase_ * fromIntegral samplesPerWave) (samplesPerWave-1)
-    waveN = min (floor $ waveIndex_ * (fromIntegral numWaves)) (numWaves - 1)
-  in if V.null table 
-      then 0
-      else (table ! waveN) ! i
 
+-- they're the same type
+wavetableReader :: Wavetable -> OscReader
+wavetableReader = id            
 
 waveformFromSamples :: [Float] -> Waveform
 waveformFromSamples vals = \x -> let
@@ -100,7 +88,6 @@ sineOsc = simpleOsc pureTone
 wavetableOsc :: Wavetable -> Oscillator
 wavetableOsc table = zeroOsc & getSample .~ wavetableReader table
 
-
 -- ==============================================
 
 stepOsc :: Seconds -> State Oscillator Pulse
@@ -115,9 +102,6 @@ stepOsc dt = do
   waveIndex_ <- use waveIndex
   let output = getSample_ waveIndex_ newPhase
   return  output
--- stepOsc dt = state $ \os -> let newPhase = flip mod' 1.0 $ os ^. phase + dt*(os ^. freq)
---                               in ( (*0.1) $ os ^. wave $ newPhase, os & phase .~ newPhase)
-
 
 -- should basically act like iterating stepOsc N times
 runOsc :: Int -> Seconds -> State Oscillator [Pulse]
@@ -126,16 +110,3 @@ runOsc n dt = do
   pulse <- stepOsc dt
   pulses <- runOsc (n-1) dt
   return $ pulse:pulses
-
--- runOsc n dt = do
---   wave_ <- use wave
---   phase_ <- use phase
---   freq_ <- use freq
---   -- let nextPhase = flip mod' 1.0 $ phase_ + dt*freq_*(fromIntegral n)
---   let phases = map (\i -> (dt*freq_*(fromIntegral i)) + phase_) [1..n]
---   let nextPhase = flip mod' 1.0 $ last phases
---   OOPS wave_ doesn't take the phase as input, it reads it from the Oscillator state
---   outputs <- mapState wave_ phases
---   -- put $ osc & phase .~ nextPhase
---   phase .= nextPhase
---   return outputs
