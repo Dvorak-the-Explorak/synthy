@@ -3,6 +3,8 @@
            , TemplateHaskell
            , TypeSynonymInstances
            , FlexibleInstances
+           , RankNTypes
+           , ExistentialQuantification
   #-}
 
 module Voices where
@@ -15,7 +17,7 @@ import MidiStuff (NoteNumber(..), hzFromNoteNumber)
 import Oscillators
 import Filters 
 import Envelopes 
-import Helpers (overState, joinStatesWith)
+import Helpers ((.@), iterateState)
 
 import Debug.Trace
 
@@ -46,10 +48,10 @@ initialiseVoice v noteNum = v & osc . freq .~ (hzFromNoteNumber noteNum)
 
 -- #TODO since voice has a NoteNumber, should this take note number and do nothing if they don't match?
 releaseVoice :: Voice a -> Voice a
-releaseVoice = (over venv noteOffEnv) . (over filtEnv noteOffEnv)
+releaseVoice = (venv %~ noteOffEnv) . (filtEnv %~ noteOffEnv)
 
 restartVoice :: Voice a -> Voice a
-restartVoice = (over venv restartEnv) . (over filtEnv restartEnv)
+restartVoice = (venv %~ restartEnv) . (filtEnv %~ restartEnv)
 
 -- #TODO default voice could be better thought through
 defaultVoice :: Voice Hz
@@ -71,7 +73,7 @@ defaultVoice = Voice {
   -- run the filter envelope and update the filter frequency
 stepFilterEnv :: Seconds -> State (Voice a) ()
 stepFilterEnv dt = do
-  filterFreqOffset <- overState filtEnv $ stepEnv dt
+  filterFreqOffset <- stepEnv dt .@ filtEnv
   f <- use filtEnvCurve
   filt.param .= f filterFreqOffset
 
@@ -83,16 +85,16 @@ stepVoice dt = do
   stepFilterEnv dt
 
   -- run the oscillator and the volume envelope
-  pulse <- overState osc $ stepOsc dt
-  vol <- overState venv $ stepEnv dt
+  pulse <-  stepOsc dt .@ osc
+  vol <- stepEnv dt .@ venv
 
   -- run the filter
-  output <- overState filt $ runFilter (pulse*vol)
+  output <- runFilter (pulse*vol) .@ filt
 
   return $ output
 
 
 -- #TODO runVoice needs to do the same stuff as stepVoice (ie run the filters)
 runVoice :: Int -> Seconds -> State (Voice a) [Pulse]
-runVoice n dt = joinStatesWith (zipWith (*)) (overState osc $ runOsc n dt) (overState venv $ runEnv n dt)
+runVoice n dt = iterateState n $ stepVoice dt
 

@@ -66,12 +66,14 @@ joinStatesWith f op1 op2 = do
   out2 <- op2
   return $ f out1 out2
 
--- overState :: Lens s s a a -> State s b -> State a b
--- overState = undefined
-overState :: Lens s s a a -> State a b -> State s b
+-- #TODO should this be a more general lens?
+overState :: Lens' s a -> State a b -> State s b
 overState l op = state $ \s -> 
   let (output, subState) = runState op $ view l s
   in (output, set l subState s)
+
+(.@) :: State a b -> Lens' s a -> State s b
+(.@) op l = overState l op
 
 -- from Prelude or Data.List
 -- unzip :: [(a,b)] -> ([a], [b])
@@ -105,10 +107,17 @@ iterateState n op = do
   return $ x:xs
 
 
-
-
-
 -- ==================================
+
+-- (.=) :: Lens' s a -> a -> State s ()
+-- (%=) :: Lens' s a -> (a -> a) -> State s ()
+
+-- (.*=) :: Lens' s (a -> b) -> Lens' s a -> Lens' s b -> State s ()
+-- (.*=) fl xl tl = do
+--   f <- use fl
+--   x <- use xl
+--   tl .= f x
+
 
 -- mapLens :: Lens' s a -> Lens' [s] [a]
 -- mapLens l = lens get_ set_

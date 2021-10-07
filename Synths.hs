@@ -10,7 +10,7 @@ module Synths where
 import General (Seconds, Pulse, sampleRate, Hz)
 import Voices (Voice(..), initialiseVoice, defaultVoice, stepVoice, releaseVoice, restartVoice, note, venv, osc)
 import Filters
-import Helpers (stateMap, overState, mapWhere, iterateState, iterateStateUntil)
+import Helpers ((.@), stateMap, mapWhere, iterateState, iterateStateUntil)
 import MidiStuff (NoteNumber)
 import Envelopes (VolEnv(..), EnvSegment(..), currentState)
 import Oscillators (Oscillator, zeroOsc, lfo1s, stepOsc, freq, waveIndex)
@@ -74,11 +74,12 @@ noteOffVoices noteNum = modify $ releaseVoices noteNum
 stepFullSynth :: Seconds -> State FullSynth Pulse
 stepFullSynth dt  = do
   -- step the [Voice]
-  pulse <- overState voices $ stepVoices dt
+  -- pulse <- overState voices $ stepVoices dt
+  pulse <- stepVoices dt .@ voices
   
   -- run the LFO
-  moduland <- overState lfo $ stepOsc dt
-  strength <- gets (view lfoStrength)
+  moduland <- stepOsc dt .@ lfo
+  strength <- use lfoStrength
 
   -- modulate the filter cutoff with the LFO
   filt.param += strength*moduland
@@ -89,7 +90,7 @@ stepFullSynth dt  = do
   voices.each.osc.waveIndex .= (moduland+1)/2
 
   -- -- run the filter to get the output
-  output <- overState filt $ runFilter pulse
+  output <- runFilter pulse .@ filt
 
   -- unmodulate the filter cutoff
   filt.param -= strength*moduland
@@ -129,10 +130,10 @@ runFullSynth dt | dt < (1.0/sampleRate) = return []
 noteOnFullSynth :: NoteNumber -> State FullSynth ()
 noteOnFullSynth note = do
   newVoice <- use voiceTemplate
-  overState voices $ noteOnVoicesWith (initialiseVoice newVoice) note
+  noteOnVoicesWith (initialiseVoice newVoice) note .@ voices
 
 noteOffFullSynth :: NoteNumber -> State FullSynth ()
-noteOffFullSynth note = overState voices $ noteOffVoices note
+noteOffFullSynth note = noteOffVoices note .@ voices
 
 noteOffAllFullSynth :: State FullSynth ()
 noteOffAllFullSynth = voices.each %= releaseVoice
