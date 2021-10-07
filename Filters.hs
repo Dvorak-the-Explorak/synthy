@@ -17,19 +17,18 @@ import General (Pulse, Hz, Volume, Seconds)
 import Helpers
 
 
--- #TODO make filters composable instead of needing sequenceFilters - want to have bandPass lo hi = highPass lo . lowPass hi 
-
-
 -- type variable a indicates what parameters the filter exposes
 data Filter a = forall s. Filter {
   _filterStorage :: s,
   _filterParam :: a,
   _filterRun :: FilterFunc s a
 }
+
 type FilterFunc s a = (a -> Pulse -> State s Pulse)
 
 -- makes the lenses, calls the lens for _filterStorage just storage
 makeFields ''Filter
+
 
 -- This is made slightly messier because we can't use record accesors or record updates
 --  means lenses don't work either, have to make the whole record at once / pattern match
@@ -40,9 +39,9 @@ runFilter pulse = state $ \(Filter s param run) -> let
 
 -- apply a function to the filter output
 mapFilterOutput :: (Pulse -> Pulse) -> Filter a -> Filter a
-mapFilterOutput f (Filter {_filterStorage=s, _filterParam=p, _filterRun=r}) = let 
+mapFilterOutput f (Filter s p r) = let 
     r' = \p' pulse -> fmap f (r p' pulse)
-  in (Filter {_filterStorage=s, _filterParam=p, _filterRun=r'})    
+  in (Filter s p r')    
 
 (~>) :: Filter a -> Filter b -> Filter (a,b)
 (~>) = sequenceFiltersPacked id id
@@ -60,32 +59,38 @@ mapFilterOutput f (Filter {_filterStorage=s, _filterParam=p, _filterRun=r}) = le
 parallelFilters :: (Pulse -> Pulse -> Pulse) -> Filter a -> Filter b -> Filter (a,b)
 parallelFilters f = parallelFiltersPacked f id id
 
-
 -- packs and unpacks the parameters to a different form
 parallelFiltersPacked :: (Pulse -> Pulse -> Pulse) -> ((a,b) -> c) -> (c -> (a,b)) -> Filter a -> Filter b -> Filter c
-parallelFiltersPacked f packParams getParams (Filter {_filterStorage=s1, _filterParam=p1, _filterRun=r1}) (Filter {_filterStorage=s2, _filterParam=p2, _filterRun=r2}) = let    
-    r = \p' pulse -> 
-          state $ \(s1', s2') -> 
-            let (p1', p2') = getParams p'
-                -- do both the filters on the input pulse
-                (out1, newS1) = runState (r1 p1' pulse) s1'
-                (out2, newS2) = runState (r2 p2' pulse) s2'
-            in (f out1 out2, (newS1, newS2))
-  in (Filter {_filterStorage=(s1,s2), _filterParam=packParams (p1,p2), _filterRun=r})    
+parallelFiltersPacked f packParams getParams (Filter s1 p1 r1) (Filter s2 p2 r2) = let    
+    s = (s1, s2)
+    p = packParams (p1, p2)
+    r = \p' pulse -> do
+      let (p1', p2') = getParams p'
+      out1 <- overState _1 $ r1 p1' pulse
+      out2 <- overState _2 $ r2 p2' pulse
+      return $ f out1 out2
+  in Filter s p r
 
 sequenceFiltersPacked :: ((a,b) -> c) -> (c -> (a,b)) -> Filter a -> Filter b -> Filter c
-sequenceFiltersPacked packParams getParams (Filter {_filterStorage=s1, _filterParam=p1, _filterRun=r1}) (Filter {_filterStorage=s2, _filterParam=p2, _filterRun=r2}) = let    
-    -- r1 :: a -> Pulse -> State s1 Pulse
-    -- r2 :: b -> Pulse -> State s2 Pulse
-    r = \p' pulse -> 
-          state $ \(s1', s2') -> 
-            let (p1', p2') = getParams p'
-                -- run first filter on input pulse
-                (out1, newS1) = runState (r1 p1' pulse) s1'
-                -- run second filter on output of first filter
-                (out2, newS2) = runState (r2 p2' out1) s2'
-            in (out2, (newS1, newS2))
-  in (Filter {_filterStorage=(s1,s2), _filterParam= packParams (p1,p2), _filterRun=r})
+sequenceFiltersPacked packParams getParams (Filter s1 p1 r1) (Filter s2 p2 r2) = let
+    s = (s1,s2)
+    p = packParams (p1, p2)
+    r = \p' pulse -> do
+      let (p1', p2') = getParams p'
+      out1 <- overState _1 $ r1 p1' pulse
+      out2 <- overState _2 $ r2 p2' out1
+      return out2
+  in Filter s p r
+
+joinFilters :: ((Pulse, Pulse) -> Pulse) -> ((Pulse, Pulse) -> Pulse) -> Filter a -> Filter b -> Filter (a,b)
+joinFilters secondInput getResult (Filter s1 p1 r1) (Filter s2 p2 r2) = let
+    s = (s1, s2)
+    p = (p1, p2)
+    r = \(p1', p2') pulse -> do
+      out1 <- overState _1 $ r1 p1' pulse
+      out2 <- overState _2 $ r2 p2' $ secondInput (pulse,out1)
+      return $ getResult (out1,out2)
+  in (Filter s p r)
 
 
 
