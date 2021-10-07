@@ -30,7 +30,7 @@ data Oscillator = Oscillator {
   _phase :: Phase,
   _freq :: Hz,
   _waveIndex :: Phase
-}
+} 
 
 -- makes the lenses, calls the lens for _getSample just getSample
 makeLenses ''Oscillator
@@ -97,7 +97,7 @@ stepOsc dt = do
   freq_ <- use freq
   let newPhase = flip mod' 1.0 $ phase_ + dt*freq_
   -- assign phase newPhase -- `assign` is `set` on the state
-  phase .= newPhase -- operator notation for assign
+  phase .= newPhase -- operator notation for assign ("set" but for state)
 
   waveIndex_ <- use waveIndex
   let output = getSample_ waveIndex_ newPhase

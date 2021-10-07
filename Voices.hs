@@ -21,16 +21,14 @@ import Debug.Trace
 
 
 
--- #TODO turn these `type` declarations into `data` declarations and lens it up boi
 -- #TODO a voice should be allowed to mix multiple oscillators... 
---  constructing a VoicedSynth should take a voice constructor :: Note -> Voice
---  then we could replace Oscillator with [Oscillator]
-data Voice = Voice {
+--    we could replace Oscillator with [Oscillator]
+data Voice a = Voice {
   _voiceOsc :: Oscillator, 
   _voiceVenv :: VolEnv,
   _voiceFiltEnv :: VolEnv,
-  _voiceFilt :: Filter Hz,
-  _voiceFiltEnvCurve :: (Volume -> Hz), 
+  _voiceFilt :: Filter a,
+  _voiceFiltEnvCurve :: (Volume -> a), 
   _voiceNote :: NoteNumber
 }
 
@@ -42,19 +40,19 @@ makeFields ''Voice
 
 -- =======================================================================
 
-initialiseVoice :: Voice -> NoteNumber -> Voice
+initialiseVoice :: Voice a -> NoteNumber -> Voice a
 initialiseVoice v noteNum = v & osc . freq .~ (hzFromNoteNumber noteNum)
                               & note .~ noteNum
 
 -- #TODO since voice has a NoteNumber, should this take note number and do nothing if they don't match?
-releaseVoice :: Voice -> Voice
+releaseVoice :: Voice a -> Voice a
 releaseVoice = (over venv noteOffEnv) . (over filtEnv noteOffEnv)
 
-restartVoice :: Voice -> Voice
+restartVoice :: Voice a -> Voice a
 restartVoice = (over venv restartEnv) . (over filtEnv restartEnv)
 
 -- #TODO default voice could be better thought through
-defaultVoice :: Voice
+defaultVoice :: Voice Hz
 defaultVoice = Voice {
     _voiceOsc = sawOsc,
     _voiceVenv = VolEnv {
@@ -71,14 +69,14 @@ defaultVoice = Voice {
 }
 
   -- run the filter envelope and update the filter frequency
-stepFilterEnv :: Seconds -> State Voice ()
+stepFilterEnv :: Seconds -> State (Voice a) ()
 stepFilterEnv dt = do
   filterFreqOffset <- overState filtEnv $ stepEnv dt
   f <- use filtEnvCurve
   filt.param .= f filterFreqOffset
 
 
-stepVoice :: Seconds -> State Voice Pulse
+stepVoice :: Seconds -> State (Voice a) Pulse
 stepVoice dt = do
 
   -- run the filter envelope and update the filter frequency
@@ -95,6 +93,6 @@ stepVoice dt = do
 
 
 -- #TODO runVoice needs to do the same stuff as stepVoice (ie run the filters)
-runVoice :: Int -> Seconds -> State Voice [Pulse]
+runVoice :: Int -> Seconds -> State (Voice a) [Pulse]
 runVoice n dt = joinStatesWith (zipWith (*)) (overState osc $ runOsc n dt) (overState venv $ runEnv n dt)
 

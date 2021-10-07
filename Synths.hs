@@ -24,16 +24,16 @@ import Codec.Midi
 
 -- FullSynth is just a [Voice] with a global filter, modulated by LFO
 data FullSynth = FullSynth {
-  _fullSynthVoices :: [Voice], 
+  _fullSynthVoices :: [Voice Hz], 
   _fullSynthFilt :: Filter Hz,
   _fullSynthLfo :: Oscillator,
   _fullSynthLfoStrength :: Float,
-  _fullSynthVoiceTemplate :: Voice
+  _fullSynthVoiceTemplate :: Voice Hz
 }
 
 makeFields ''FullSynth
 
-stepVoices :: Seconds -> State [Voice] Pulse
+stepVoices :: Seconds -> State [Voice a] Pulse
 stepVoices dt = do
   output <- fmap sum $ stateMap $ stepVoice dt
   cullVoices
@@ -41,28 +41,23 @@ stepVoices dt = do
 
 
 -- #TODO this isn't actually "running", just iterating steps
-runVoicesSteps :: Int -> Seconds -> State [Voice] [Pulse]
--- runVoicesSteps 0 dt = return []
--- runVoicesSteps n dt = do
---   pulse <- stepVoices dt
---   pulses <- runVoicesSteps (n-1) dt
---   return (pulse:pulses)
+runVoicesSteps :: Int -> Seconds -> State [Voice a] [Pulse]
 runVoicesSteps n dt = iterateState n (stepVoices dt)
 
 
-cullVoices :: State [Voice] ()
+cullVoices :: State [Voice a] ()
 cullVoices = let running = views (venv . currentState) (<EnvDone)
                   in modify (filter running)
 
-restartVoices :: NoteNumber -> [Voice] -> [Voice]
+restartVoices :: NoteNumber -> [Voice a] -> [Voice a]
 restartVoices noteNum voices = mapWhere ((==noteNum) . (view note)) restartVoice voices
 
-releaseVoices :: NoteNumber -> [Voice] -> [Voice]
+releaseVoices :: NoteNumber -> [Voice a] -> [Voice a]
 releaseVoices noteNum voices = mapWhere ((==noteNum) . (view note)) releaseVoice voices
 
 -- if there are any voices for that note, set the envelope to EnvAttack state
 --  otherwise add a new voice for the note
-noteOnVoicesWith :: (NoteNumber -> Voice) ->  NoteNumber -> State [Voice] ()
+noteOnVoicesWith :: (NoteNumber -> Voice a) ->  NoteNumber -> State [Voice a] ()
 noteOnVoicesWith makeVoice noteNum = modify $ \voices -> 
     if any ((==noteNum) . (view note)) voices
       -- revert envelope to state 1
@@ -71,7 +66,7 @@ noteOnVoicesWith makeVoice noteNum = modify $ \voices ->
       else (makeVoice noteNum ):voices
 
 -- set the envelope of any voices with the corrseponding note to EnvRelease state
-noteOffVoices :: NoteNumber -> State [Voice] ()
+noteOffVoices :: NoteNumber -> State [Voice a] ()
 noteOffVoices noteNum = modify $ releaseVoices noteNum 
 
 -- ===================================================================================
