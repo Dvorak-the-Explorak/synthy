@@ -20,6 +20,7 @@ executable synthy
   main-is:             hasynth.hs
   other-modules:
     General
+    Steppable
     Oscillators
     Envelopes
     Filters

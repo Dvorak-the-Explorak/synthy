@@ -1,5 +1,4 @@
-{-#  LANGUAGE BangPatterns 
-#-}
+{-#  LANGUAGE BangPatterns #-}
 
 module Wavetable where
 

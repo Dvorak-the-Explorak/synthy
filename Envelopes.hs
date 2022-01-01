@@ -9,9 +9,8 @@ module Envelopes where
 import Control.Monad.State
 import Control.Lens
 
-
-import General (Volume, Seconds, Pulse, sampleRate)
-
+import General
+import Steppable
 
 
 
@@ -28,6 +27,33 @@ data VolEnv = VolEnv {
 
 -- makes the lenses, calls the lens for _attackSlope just attackSlope
 makeLenses ''VolEnv
+
+instance Steppable Volume VolEnv where
+  step dt = do
+    slope <- gets envSlope
+    vol <- use volume 
+    -- let slope = envSlope venv
+    -- let nextVol = (dt*slope) + (venv ^. volume)
+    let nextVol = vol + (dt*slope)
+    venv <- get
+    if timestepWithinSegment venv dt
+      then (put $ venv & volume .~ nextVol) >> return nextVol
+      else withState toNextSegment $ step (dt - timeToSegmentTarget venv)
+
+-- Run the envelope N samples forward
+runEnv :: Int -> Seconds -> State VolEnv [Volume]
+runEnv 0 dt = return []
+runEnv n dt = do
+  venv <- get
+  let slope = envSlope venv
+  let steps = take n $ tail $ iterate (+(dt*slope)) (venv ^. volume)
+  let valid = takeWhile (stillInSegment venv) steps
+  nextSegmentSteps <- if length valid == n
+                        then (put $ venv & volume .~ last valid) >> return []
+                        -- then state $ \venv -> ([], venv {_volume = last valid})
+                        else withState toNextSegment $ runEnv (n - (length valid)) dt
+  return $ valid ++ nextSegmentSteps
+
 
 -- =============================================================================
 -- ======================== Functions ==========================================
@@ -95,28 +121,3 @@ noteOffEnv venv = venv & currentState .~ EnvRelease
 -- class Steppable s a where
 -- step :: Seconds -> State s a
 -- run :: Int -> Seconds -> State s [a]
-
--- Step the envelope one sample forward
-stepEnv :: Seconds -> State VolEnv Volume
-stepEnv dt = do
-  venv <- get
-  let slope = envSlope venv
-  let nextVol = (dt*slope) + (venv ^. volume)
-  if timestepWithinSegment venv dt
-    then (put $ venv & volume .~ nextVol) >> return nextVol
-         -- in state $ \venv -> (nextVol, venv {_volume = nextVol})
-    else withState toNextSegment $ stepEnv (dt - timeToSegmentTarget venv)
-
--- Run the envelope N samples forward
-runEnv :: Int -> Seconds -> State VolEnv [Volume]
-runEnv 0 dt = return []
-runEnv n dt = do
-  venv <- get
-  let slope = envSlope venv
-  let steps = take n $ tail $ iterate (+(dt*slope)) (venv ^. volume)
-  let valid = takeWhile (stillInSegment venv) steps
-  nextSegmentSteps <- if length valid == n
-                        then (put $ venv & volume .~ last valid) >> return []
-                        -- then state $ \venv -> ([], venv {_volume = last valid})
-                        else withState toNextSegment $ runEnv (n - (length valid)) dt
-  return $ valid ++ nextSegmentSteps

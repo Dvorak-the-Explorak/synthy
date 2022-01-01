@@ -23,7 +23,9 @@ import MidiStuff (NoteNumber(..), hzFromNoteNumber)
 import Oscillators
 import Filters 
 import Envelopes 
+import Steppable
 import Helpers ((.@), iterateState)
+
 
 import Debug.Trace
 
@@ -45,6 +47,27 @@ data Voice a = Voice {
 -- calls the lens for _voiceFiltEnv filtEnv 
 --  using typeclasses so multiple different types can have a filtEnv
 makeFields ''Voice
+
+instance Steppable Pulse (Voice a) where
+  step dt =  do
+    -- run the filter envelope and update the filter frequency
+    stepFilterEnv dt
+
+    -- run the oscillator and the volume envelope
+    pulse <-  step dt .@ osc
+    vol <- step dt .@ venv
+
+    -- run the filter
+    output <- runFilter (pulse*vol) .@ filt
+
+    return $ output
+
+  -- run the filter envelope and update the filter frequency
+stepFilterEnv :: Seconds -> State (Voice a) ()
+stepFilterEnv dt = do
+  filterFreqOffset <- step dt .@ filtEnv
+  f <- use filtEnvCurve
+  filt.param .= f filterFreqOffset
 
 
 -- =======================================================================
@@ -76,32 +99,3 @@ defaultVoice = Voice {
     _voiceFiltEnvCurve = (\v -> 800 + 16000*v),
     _voiceNote = 0
 }
-
-  -- run the filter envelope and update the filter frequency
-stepFilterEnv :: Seconds -> State (Voice a) ()
-stepFilterEnv dt = do
-  filterFreqOffset <- stepEnv dt .@ filtEnv
-  f <- use filtEnvCurve
-  filt.param .= f filterFreqOffset
-
-
-stepVoice :: Seconds -> State (Voice a) Pulse
-stepVoice dt = do
-
-  -- run the filter envelope and update the filter frequency
-  stepFilterEnv dt
-
-  -- run the oscillator and the volume envelope
-  pulse <-  stepOsc dt .@ osc
-  vol <- stepEnv dt .@ venv
-
-  -- run the filter
-  output <- runFilter (pulse*vol) .@ filt
-
-  return $ output
-
-
--- #TODO runVoice needs to do the same stuff as stepVoice (ie run the filters)
-runVoice :: Int -> Seconds -> State (Voice a) [Pulse]
-runVoice n dt = iterateState n $ stepVoice dt
-

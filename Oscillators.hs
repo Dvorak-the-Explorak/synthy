@@ -18,10 +18,11 @@ import Control.Monad.State
 import Control.Monad.Reader
 import Control.Lens
 
-import General (Phase, Pulse, Hz, Seconds)
+import General (Phase, Pulse, Hz, Seconds, WaveIndex)
 import Data.Fixed (mod')
 import Wavetable (Wavetable)
 import Helpers
+import Steppable
 
 import Debug.Trace
 
@@ -31,8 +32,7 @@ import Debug.Trace
 -- pure waveform, can evaluate its pulse from just phase
 type Waveform = Phase -> Pulse
 -- also takes wave index
-type OscReader = Waveindex -> Phase -> Pulse
-type WaveIndex = Phase
+type OscReader = WaveIndex -> Phase -> Pulse
 
 
 data Oscillator = Oscillator {
@@ -42,10 +42,25 @@ data Oscillator = Oscillator {
   _waveIndex :: Phase
 } 
 
+
 -- makes the lenses, calls the lens for _getSample just getSample
 makeLenses ''Oscillator
 
 -- ==========================================
+
+instance Steppable Pulse Oscillator where
+  step dt = do
+    getSample_ <- use getSample
+    phase_ <- use phase -- `use` is `view` on the state
+    freq_ <- use freq
+    let newPhase = (`mod'` 1.0) $ phase_ + dt*freq_
+    phase .= newPhase -- operator notation for assign ("set" but for state)
+
+    waveIndex_ <- use waveIndex
+    let output = getSample_ waveIndex_ newPhase
+    return  output
+
+
 
 pureTone :: Waveform
 pureTone = (sin . (*) (2*pi))
@@ -104,24 +119,3 @@ wavetableOsc table = zeroOsc & getSample .~ wavetableReader table
 -- step :: Seconds -> State s a
 -- run :: Int -> Seconds -> State s [a]
 
-
-stepOsc :: Seconds -> State Oscillator Pulse
-stepOsc dt = do
-  getSample_ <- use getSample
-  phase_ <- use phase -- `use` is `view` on the state
-  freq_ <- use freq
-  let newPhase = flip mod' 1.0 $ phase_ + dt*freq_
-  -- assign phase newPhase -- `assign` is `set` on the state
-  phase .= newPhase -- operator notation for assign ("set" but for state)
-
-  waveIndex_ <- use waveIndex
-  let output = getSample_ waveIndex_ newPhase
-  return  output
-
--- should basically act like iterating stepOsc N times
-runOsc :: Int -> Seconds -> State Oscillator [Pulse]
-runOsc 0 dt = return []
-runOsc n dt = do
-  pulse <- stepOsc dt
-  pulses <- runOsc (n-1) dt
-  return $ pulse:pulses

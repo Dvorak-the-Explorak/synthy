@@ -6,6 +6,7 @@ type SamplesPerSecond = Float
 type Hz = Float
 type Phase = Float
 type Pulse = Float
+type WaveIndex = Float
 type ScaleDegree = Int
 type Beats = Float
 type DutyCycle = Float
@@ -21,6 +22,8 @@ addSounds = zipWith (+)
 -- #TODO make this less hardcoded
 sampleRate :: SamplesPerSecond
 sampleRate = 48000.0
+
+
 
 semitone :: Hz
 semitone = 2.0 ** (1.0/12)
