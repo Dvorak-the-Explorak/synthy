@@ -26,7 +26,7 @@ instance Show Pitch where
     show (Pitch n oct) | n >=0 && n < 12 = (noteNames !! n) ++ (show oct)
                       | otherwise = (noteNames !! (n `mod` 12)) ++ (show $ oct + n `div` 12)
 
--- enharmonic spellings ignored
+-- enharmonic spellings ignored, just go with sharps
 noteNames = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
 
 -- pitchFromString str | (str !! 1) == '#' = Pitch (find (== take 2 str) noteNames) (read $ drop 2 str)

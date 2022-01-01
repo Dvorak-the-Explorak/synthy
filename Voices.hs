@@ -9,6 +9,12 @@
 
 module Voices where
 
+-- A voice is a single active oscillator in a synth, attached to one NoteNumber. 
+--  it has an oscillator, a volume envelope, a note number, and its own filter.
+
+
+
+
 import Control.Monad.State
 import Control.Lens
 
@@ -25,6 +31,7 @@ import Debug.Trace
 
 -- #TODO a voice should be allowed to mix multiple oscillators... 
 --    we could replace Oscillator with [Oscillator]
+
 data Voice a = Voice {
   _voiceOsc :: Oscillator, 
   _voiceVenv :: VolEnv,

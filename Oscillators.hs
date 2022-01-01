@@ -7,6 +7,13 @@
 
 module Oscillators where
 
+-- An Oscillator stores its current wave index and phase, 
+--  as well as its frequency and a function that outputs its pulse
+
+-- An Oscillator can be a primitive wave (sine, square, saw,...)
+--  or something loaded from a WAVE file (wavetable, sample)
+
+
 import Control.Monad.State
 import Control.Monad.Reader
 import Control.Lens
@@ -18,12 +25,15 @@ import Helpers
 
 import Debug.Trace
 
--- #TODO add stepOsc as a record field
--- #TODO actually things should be more typeclasses than records? esp. the state operations...
+-- #TODO turn stepOsc into a class instance method
 
 
+-- pure waveform, can evaluate its pulse from just phase
 type Waveform = Phase -> Pulse
-type OscReader = Phase -> Phase -> Pulse
+-- also takes wave index
+type OscReader = Waveindex -> Phase -> Pulse
+type WaveIndex = Phase
+
 
 data Oscillator = Oscillator {
   _getSample :: OscReader,
@@ -89,6 +99,11 @@ wavetableOsc :: Wavetable -> Oscillator
 wavetableOsc table = zeroOsc & getSample .~ wavetableReader table
 
 -- ==============================================
+
+-- class Steppable s a where
+-- step :: Seconds -> State s a
+-- run :: Int -> Seconds -> State s [a]
+
 
 stepOsc :: Seconds -> State Oscillator Pulse
 stepOsc dt = do

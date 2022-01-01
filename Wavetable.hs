@@ -13,7 +13,8 @@ import Helpers
 import Debug.Trace
 
 -- type Wavetable = V.Vector (V.Vector Pulse)
-type Wavetable = Phase -> Phase -> Pulse
+type Wavetable = WaveIndex -> Phase -> Pulse
+
 
 waveFileDescription :: WAVE -> String
 waveFileDescription wav = (show channels ++ " channels, " 
@@ -26,9 +27,11 @@ waveFileDescription wav = (show channels ++ " channels, "
     bits = waveBitsPerSample $ waveHeader wav
     frames = waveFrames $ waveHeader wav
 
+
 samplesFromWave :: WAVE -> [Pulse]
 samplesFromWave wav = map (realToFrac . sampleToDouble . head) $ waveSamples wav
 
+-- load a wavetable with n samples
 loadWavetable :: Int -> WAVE -> Wavetable
 loadWavetable n wav = let
     !groups = group n $ samplesFromWave wav
@@ -36,7 +39,7 @@ loadWavetable n wav = let
     !table = V.fromList vectors
   in readTable table
 
-
+-- Given a 2D Vector of pulses, produce a Wavetable (function from index and phase to pulse)
 readTable :: V.Vector (V.Vector Pulse) -> Wavetable
 readTable table = \waveIndex_ phase_ -> let 
     samplesPerWave = V.length $ V.head table

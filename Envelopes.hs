@@ -92,6 +92,10 @@ noteOffEnv venv = venv & currentState .~ EnvRelease
 -- ================================================
 
 
+-- class Steppable s a where
+-- step :: Seconds -> State s a
+-- run :: Int -> Seconds -> State s [a]
+
 -- Step the envelope one sample forward
 stepEnv :: Seconds -> State VolEnv Volume
 stepEnv dt = do

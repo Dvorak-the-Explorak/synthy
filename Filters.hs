@@ -9,6 +9,8 @@
 
 module Filters where
 
+-- A Filter is a stateful object which can modify sequences of pulses 
+--  it has internal state, and exposes parameters.  
 
 import Control.Monad.State
 import Control.Lens
@@ -18,16 +20,28 @@ import Helpers
 
 
 -- type variable a indicates what parameters the filter exposes
+-- type variable s is hidden inside the filter (Like ST monad?), 
+--    and cannot escape to the outside world
 data Filter a = forall s. Filter {
   _filterStorage :: s,
   _filterParam :: a,
   _filterRun :: FilterFunc s a
 }
 
+-- the only thing that's allowed to touch the filter storage type
+--  takes its parameter type and the input pulse,
+--  returns statefult effect that updates the filterStorage and returns output pulse
 type FilterFunc s a = (a -> Pulse -> State s Pulse)
 
--- makes the lenses, calls the lens for _filterStorage just storage
+-- makes the lenses, calls the lens for _filterParam just param
 makeFields ''Filter
+
+
+
+-- class Steppable a s where
+-- step :: Seconds -> State s a
+
+-- instance Steppable Pulse (Filter a) where
 
 
 -- This is made slightly messier because we can't use record accesors or record updates
@@ -193,8 +207,9 @@ clipperFunc :: FilterFunc () Volume
 -- clipperFunc = return .: hardClipLimit -- no gain
 clipperFunc = \limit ->  return . (/limit) . hardClipLimit limit
 
--- ===============================================
 
+
+-- ===============================================
 
 mapFilter :: FilterFunc s p -> p -> [Pulse] -> State s [Pulse]
 mapFilter _filt param [] = return []

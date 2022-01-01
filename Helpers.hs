@@ -18,21 +18,25 @@ import Control.Lens.Lens
 
 import General (Pulse, Volume)
 
-  
+-- rotate a list, sending the first n items to the back 
 rot :: Int -> [a] -> [a]
 rot _ [] = []
 rot 0 xs = xs
 rot n (x:xs) = rot (n-1) $ xs ++ [x]
 
+-- chunk the list into groups of n items
 group :: Int -> [a] -> [[a]]
 group 0 _ = []
 group _ [] = []
 group n xs = take n xs : (group n $ drop n xs)
 
+-- map all elements that satisfy a boolean
 mapWhere :: (a -> Bool) -> (a -> a) -> [a] -> [a]
 mapWhere p f = map (\x -> if (p x) then f x else x)
 
 
+
+-- 
 (.:) :: (c -> d) -> (a -> b -> c) -> (a -> b -> d)
 (.:) = fmap . fmap -- using the (a->) functor
 -- fmap (c -> d) :: Functor f => f c -> f d 
