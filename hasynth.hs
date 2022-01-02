@@ -73,7 +73,7 @@ performMidiSaw = performMidiWithOscillator sawOsc
 performMidiSquare = performMidiWithOscillator squareOsc
 performMidiSine = performMidiWithOscillator sineOsc
 
-performMidiWithOscillator :: Oscillator -> Track Ticks -> [Pulse]
+performMidiWithOscillator :: Oscillator FreqParam -> Track Ticks -> [Pulse]
 performMidiWithOscillator osc_ = performMidiWithSynth $ defaultSynth & voiceTemplate.osc .~ osc_
 
 -- =====================================================

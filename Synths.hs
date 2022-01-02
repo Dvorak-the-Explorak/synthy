@@ -13,7 +13,7 @@ import Filters
 import Helpers ((.@), stateMap, mapWhere, iterateState, iterateStateUntil)
 import MidiStuff (NoteNumber)
 import Envelopes (VolEnv(..), EnvSegment(..), currentState)
-import Oscillators (Oscillator, zeroOsc, lfo1s, freq, waveIndex)
+import Oscillators
 import Steppable
 
 import Control.Monad.State
@@ -24,11 +24,11 @@ import Codec.Midi
 
 -- FullSynth is just a [Voice] with a global filter, modulated by LFO
 data FullSynth = FullSynth {
-  _fullSynthVoices :: [Voice Hz], 
+  _fullSynthVoices :: [Voice FreqParam Hz], 
   _fullSynthFilt :: Filter Hz,
-  _fullSynthLfo :: Oscillator,
+  _fullSynthLfo :: Oscillator FreqParam,
   _fullSynthLfoStrength :: Float,
-  _fullSynthVoiceTemplate :: Voice Hz
+  _fullSynthVoiceTemplate :: Voice FreqParam Hz
 }
 
 makeFields ''FullSynth
@@ -46,10 +46,10 @@ instance Steppable Pulse FullSynth where
     -- modulate the filter cutoff with the LFO
     filt.param += strength*moduland
 
-    -- modulate wavetable indices
-    -- modify $ over voices $ map (osc.waveIndex .~ (moduland+1)/2)
-    -- voices %= map (osc.waveIndex .~ (moduland+1)/2)
-    voices.each.osc.waveIndex .= (moduland+1)/2
+    -- -- modulate wavetable indices
+    -- -- modify $ over voices $ map (osc.waveIndex .~ (moduland+1)/2)
+    -- -- voices %= map (osc.waveIndex .~ (moduland+1)/2)
+    -- voices.each.osc.waveIndex .= (moduland+1)/2
 
     -- -- run the filter to get the output
     output <- runFilter pulse .@ filt
@@ -60,7 +60,7 @@ instance Steppable Pulse FullSynth where
     -- give some headroom 
     return $ 0.1*output
 
-stepVoices :: Seconds -> State [Voice a] Pulse
+stepVoices :: Seconds -> State [Voice a b] Pulse
 stepVoices dt = do
   output <- fmap sum $ stateMap $ step dt
   cullVoices
@@ -68,23 +68,23 @@ stepVoices dt = do
 
 
 -- #TODO this isn't actually "running", just iterating steps
-runVoicesSteps :: Int -> Seconds -> State [Voice a] [Pulse]
+runVoicesSteps :: Int -> Seconds -> State [Voice a b] [Pulse]
 runVoicesSteps n dt = iterateState n (stepVoices dt)
 
 
-cullVoices :: State [Voice a] ()
+cullVoices :: State [Voice a b] ()
 cullVoices = modify (filter running)
   where running = views (venv . currentState) (<EnvDone)
 
-restartVoices :: NoteNumber -> [Voice a] -> [Voice a]
+restartVoices :: NoteNumber -> [Voice a b] -> [Voice a b]
 restartVoices noteNum voices = mapWhere ((==noteNum) . (view note)) restartVoice voices
 
-releaseVoices :: NoteNumber -> [Voice a] -> [Voice a]
+releaseVoices :: NoteNumber -> [Voice a b] -> [Voice a b]
 releaseVoices noteNum voices = mapWhere ((==noteNum) . (view note)) releaseVoice voices
 
 -- if there are any voices for that note, set the envelope to EnvAttack state
 --  otherwise add a new voice for the note
-noteOnVoicesWith :: (NoteNumber -> Voice a) ->  NoteNumber -> State [Voice a] ()
+noteOnVoicesWith :: (NoteNumber -> Voice a b) ->  NoteNumber -> State [Voice a b] ()
 noteOnVoicesWith makeVoice noteNum = modify $ \voices -> 
     if any ((==noteNum) . (view note)) voices
       -- revert envelope to state 1
@@ -93,7 +93,7 @@ noteOnVoicesWith makeVoice noteNum = modify $ \voices ->
       else (makeVoice noteNum ):voices
 
 -- set the envelope of any voices with the corrseponding note to EnvRelease state
-noteOffVoices :: NoteNumber -> State [Voice a] ()
+noteOffVoices :: NoteNumber -> State [Voice a b] ()
 noteOffVoices noteNum = modify $ releaseVoices noteNum 
 
 -- ===================================================================================

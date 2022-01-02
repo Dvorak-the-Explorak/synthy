@@ -44,6 +44,8 @@ runFilter :: Pulse -> State (Filter a) Pulse
 runFilter pulse = state $ \(Filter s param run) -> let 
     (output, s') = runState (run param pulse) s
   in (output, Filter s' param run)
+  
+
 
 -- apply a function to the filter output
 mapFilterOutput :: (Pulse -> Pulse) -> Filter a -> Filter a

@@ -34,12 +34,12 @@ import Debug.Trace
 -- #TODO a voice should be allowed to mix multiple oscillators... 
 --    we could replace Oscillator with [Oscillator]
 
-data Voice a = Voice {
-  _voiceOsc :: Oscillator, 
+data Voice a b = Voice {
+  _voiceOsc :: Oscillator a, 
   _voiceVenv :: VolEnv,
   _voiceFiltEnv :: VolEnv,
-  _voiceFilt :: Filter a,
-  _voiceFiltEnvCurve :: (Volume -> a), 
+  _voiceFilt :: Filter b,
+  _voiceFiltEnvCurve :: (Volume -> b), 
   _voiceNote :: NoteNumber
 }
 
@@ -48,7 +48,7 @@ data Voice a = Voice {
 --  using typeclasses so multiple different types can have a filtEnv
 makeFields ''Voice
 
-instance Steppable Pulse (Voice a) where
+instance Steppable Pulse (Voice a b) where
   step dt =  do
     -- run the filter envelope and update the filter frequency
     stepFilterEnv dt
@@ -63,7 +63,7 @@ instance Steppable Pulse (Voice a) where
     return $ output
 
   -- run the filter envelope and update the filter frequency
-stepFilterEnv :: Seconds -> State (Voice a) ()
+stepFilterEnv :: Seconds -> State (Voice a b) ()
 stepFilterEnv dt = do
   filterFreqOffset <- step dt .@ filtEnv
   f <- use filtEnvCurve
@@ -72,19 +72,19 @@ stepFilterEnv dt = do
 
 -- =======================================================================
 
-initialiseVoice :: Voice a -> NoteNumber -> Voice a
+initialiseVoice :: FreqField a => Voice a b -> NoteNumber -> Voice a b
 initialiseVoice v noteNum = v & osc . freq .~ (hzFromNoteNumber noteNum)
                               & note .~ noteNum
 
 -- #TODO since voice has a NoteNumber, should this take note number and do nothing if they don't match?
-releaseVoice :: Voice a -> Voice a
+releaseVoice :: Voice a b -> Voice a b
 releaseVoice = (venv %~ noteOffEnv) . (filtEnv %~ noteOffEnv)
 
-restartVoice :: Voice a -> Voice a
+restartVoice :: Voice a b -> Voice a b
 restartVoice = (venv %~ restartEnv) . (filtEnv %~ restartEnv)
 
 -- #TODO default voice could be better thought through
-defaultVoice :: Voice Hz
+defaultVoice :: Voice FreqParam Hz
 defaultVoice = Voice {
     _voiceOsc = sawOsc,
     _voiceVenv = VolEnv {
