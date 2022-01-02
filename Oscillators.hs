@@ -1,6 +1,7 @@
 {-# LANGUAGE FunctionalDependencies
            , MultiParamTypeClasses
            , FlexibleInstances
+           , FlexibleContexts
            , TemplateHaskell
            , TypeSynonymInstances
            , BangPatterns
@@ -20,6 +21,7 @@ module Oscillators where
 import Control.Monad.State
 import Control.Monad.Reader
 import Control.Lens
+import System.Random
 
 import General (Phase, Pulse, Hz, Seconds, WaveIndex)
 import Data.Fixed (mod')
@@ -66,10 +68,10 @@ instance WaveIndexField p => WaveIndexField (Oscillator p) where
 instance FreqField p => FreqField (Oscillator p)where
   freq = oscParams . freq
 
+-- ==================================================
 
 
-
-
+updatePhase dt freq_ phase_ = (`mod'` 1.0) $ phase_ + dt*freq_
 
 -- stores the phase, freq as param
 -- Waveform :: Phase -> Pulse
@@ -84,7 +86,14 @@ wavetableReader f  =
   \(WavetableParam (waveIndex_,freq_)) dt -> 
     modify (updatePhase dt freq_) >> gets (f waveIndex_)
 
-updatePhase dt freq_ phase_ = (`mod'` 1.0) $ phase_ + dt*freq_
+
+randomOscReader :: RandomGen g => OscReader g ()
+randomOscReader = \ _ dt -> state $ uniformR (0.0, 1.0)
+  
+
+
+-- ============================================================
+
 
 pureTone :: Waveform
 pureTone = (sin . (*) (2*pi))
@@ -140,3 +149,32 @@ wavetableOsc table =  Oscillator
     { _getSample = wavetableReader table
     , _oscStorage = 0 -- phase
     , _oscParams = WavetableParam (0, 0)}
+
+whiteNoiseOsc :: RandomGen g => g -> Oscillator ()
+whiteNoiseOsc g = Oscillator
+  { _getSample = randomOscReader
+  , _oscStorage = g
+  , _oscParams = ()}
+
+-- =============================================================
+
+
+-- Mix 2 oscillators together 50/50
+-- ignores second oscillator's parameter
+mix :: Oscillator a -> Oscillator a -> Oscillator a
+mix (Oscillator get1 store1 p1) (Oscillator get2 store2 _) = 
+  (Oscillator getSample (store1,store2) p1)
+    where 
+      getSample param dt = do
+        out1 <- get1 param dt .@ _1
+        out2 <- get2 param dt .@ _2
+        return (0.5*out1 + 0.5*out2)
+
+noisy :: RandomGen g => g -> Oscillator a -> Oscillator a
+noisy g (Oscillator getSample store param) = (Oscillator getSample' store' param)
+  where
+    store' = (store, g)
+    getSample' param dt = do
+      output <- getSample param dt .@ _1
+      noise <- randomOscReader () dt .@ _2
+      return (0.7*output + 0.3*noise)

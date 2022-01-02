@@ -110,6 +110,17 @@
   (major1) == 1 && (major2) == 6 && (minor) <= 5)
 #endif /* MIN_VERSION_process */
 
+/* package random-1.2.1 */
+#ifndef VERSION_random
+#define VERSION_random "1.2.1"
+#endif /* VERSION_random */
+#ifndef MIN_VERSION_random
+#define MIN_VERSION_random(major1,major2,minor) (\
+  (major1) <  1 || \
+  (major1) == 1 && (major2) <  2 || \
+  (major1) == 1 && (major2) == 2 && (minor) <= 1)
+#endif /* MIN_VERSION_random */
+
 /* package utility-ht-0.0.16 */
 #ifndef VERSION_utility_ht
 #define VERSION_utility_ht "0.0.16"

@@ -9,11 +9,8 @@ newtype FreqParam = FreqParam Hz
 newtype WavetableParam = WavetableParam (WaveIndex, Hz)
 
 
-
-
-
 class FreqField s where
-  freq :: Lens' s Hz
+  freq :: Setter' s Hz
 
 instance FreqField FreqParam where
   freq = lens get set
@@ -26,9 +23,6 @@ instance FreqField WavetableParam where
     where
       get (WavetableParam (_,f)) = f
       set (WavetableParam (wi,_)) x = WavetableParam (wi,x)
-
-
-
 
 
 

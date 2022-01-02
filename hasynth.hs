@@ -8,6 +8,7 @@ import qualified Data.ByteString.Lazy as B
 import qualified Data.ByteString.Builder as B
 import Data.Foldable -- not just mconcat?
 import System.Process
+import System.Random
 import Text.Printf
 import Data.List hiding (unzip)
 import Data.Fixed (mod')
@@ -16,6 +17,7 @@ import Control.Monad.State
 import Control.Functor.HT (unzip)
 import Control.Lens
 import Control.Lens.Tuple
+
 -- =========================
 import General
 import MidiStuff
@@ -103,12 +105,16 @@ main = do
 
 
   -- let someOsc = simpleOsc $ waveformFromSamples $ take 2048 $ drop (2048*50) samples 
-  let wtOsc = wavetableOsc $ loadWavetable 2048 wav
+  -- let wtOsc = wavetableOsc $ loadWavetable 2048 wav
   
+  g <- newStdGen
+  let synth = defaultSynth & voiceTemplate.osc .~ (noisy g sawOsc) 
+  -- let synth = defaultSynth
+
   let midiFile = "c_major.mid"
   putStrLn $ printf $ "Playing " ++ midiFile
   -- playWithSynth (defaultSynth & voiceTemplate.osc .~ wtOsc) midiFile
-  playWithSynth (defaultSynth ) midiFile
+  playWithSynth synth midiFile
   putStrLn $ "made " ++ outputFile
 
 
