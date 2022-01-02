@@ -26,6 +26,7 @@ import Data.Fixed (mod')
 import Wavetable (Wavetable)
 import Helpers
 import Steppable
+import Parameterised
 
 import Debug.Trace
 
@@ -34,10 +35,9 @@ type Waveform = Phase -> Pulse
 -- also takes wave index
 type OscReader s a = a -> Seconds -> State s Pulse
 
-newtype FreqParam = FreqParam Hz
-newtype WavetableParam = WavetableParam (WaveIndex, Hz)
 
-
+-- #TODO this mirrors the Filter data type very closely, 
+--  there could some abstraction to be had here
 data Oscillator a = forall s . Oscillator {
   _getSample :: OscReader s a,
   _oscStorage :: s,
@@ -55,33 +55,20 @@ instance Steppable Pulse (Oscillator a) where
       (output, s') = runState (getSample param dt) s 
     in (output, Oscillator getSample s' param)
 
-class FreqField s where
-  freq :: Lens' s Hz
 
-instance FreqField FreqParam where
-  freq = lens get set
-    where
-      get (FreqParam f) = f
-      set (FreqParam _) x = FreqParam x
-
-instance FreqField WavetableParam where
-  freq = lens get set
-    where
-      get (WavetableParam (_,f)) = f
-      set (WavetableParam (wi,_)) x = WavetableParam (wi,x)
+-- if the oscillator's parameter exposes a waveIndex,
+--  so too does the oscillator
+instance WaveIndexField p => WaveIndexField (Oscillator p) where
+  waveIndex = oscParams . waveIndex
 
 -- if the oscillator's parameter exposes a frequency,
 --  so too does the oscillator
 instance FreqField p => FreqField (Oscillator p)where
   freq = oscParams . freq
 
-class WaveIndexField s where
-  waveIndex :: Lens' s WaveIndex
 
--- if the oscillator's parameter exposes a waveIndex,
---  so too does the oscillator
-instance WaveIndexField p => WaveIndexField (Oscillator p) where
-  waveIndex = oscParams . waveIndex
+
+
 
 
 -- stores the phase, freq as param

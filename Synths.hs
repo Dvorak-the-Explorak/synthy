@@ -15,6 +15,7 @@ import MidiStuff (NoteNumber)
 import Envelopes (VolEnv(..), EnvSegment(..), currentState)
 import Oscillators
 import Steppable
+import Parameterised
 
 import Control.Monad.State
 import Control.Lens

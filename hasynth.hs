@@ -21,6 +21,7 @@ import General
 import MidiStuff
 import Songs
 import Oscillators
+import Parameterised
 import Envelopes
 import Filters
 import Voices

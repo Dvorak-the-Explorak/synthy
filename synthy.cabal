@@ -21,6 +21,7 @@ executable synthy
   other-modules:
     General
     Steppable
+    Parameterised
     Oscillators
     Envelopes
     Filters

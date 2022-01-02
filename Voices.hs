@@ -24,6 +24,7 @@ import Oscillators
 import Filters 
 import Envelopes 
 import Steppable
+import Parameterised
 import Helpers ((.@), iterateState)
 
 
@@ -69,6 +70,12 @@ stepFilterEnv dt = do
   f <- use filtEnvCurve
   filt.param .= f filterFreqOffset
 
+
+instance FreqField p => FreqField (Voice p b) where
+  freq = osc . freq
+
+instance WaveIndexField p => WaveIndexField (Voice p b) where
+  waveIndex = osc . waveIndex
 
 -- =======================================================================
 
