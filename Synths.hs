@@ -23,6 +23,8 @@ import Debug.Trace
 
 import Codec.Midi
 
+
+-- FullSynth represents one polyphonic instrument (homogenous voice types)
 -- FullSynth is just a [Voice] with a global filter, modulated by LFO
 data FullSynth = FullSynth {
   _fullSynthVoices :: [Voice FreqParam Hz], 
@@ -67,19 +69,15 @@ stepVoices dt = do
   cullVoices
   return output
 
-
--- #TODO this isn't actually "running", just iterating steps
-runVoicesSteps :: Int -> Seconds -> State [Voice a b] [Pulse]
-runVoicesSteps n dt = iterateState n (stepVoices dt)
-
-
 cullVoices :: State [Voice a b] ()
 cullVoices = modify (filter running)
   where running = views (venv . currentState) (<EnvDone)
 
+-- send any voice with given noteNumber back to the start of its envelope
 restartVoices :: NoteNumber -> [Voice a b] -> [Voice a b]
 restartVoices noteNum voices = mapWhere ((==noteNum) . (view note)) restartVoice voices
 
+-- noteOff any voice with given noteNumber (send them to the release part of envelope)
 releaseVoices :: NoteNumber -> [Voice a b] -> [Voice a b]
 releaseVoices noteNum voices = mapWhere ((==noteNum) . (view note)) releaseVoice voices
 

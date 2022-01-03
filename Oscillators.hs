@@ -23,7 +23,7 @@ import Control.Monad.Reader
 import Control.Lens
 import System.Random
 
-import General (Phase, Pulse, Hz, Seconds, WaveIndex)
+import General
 import Data.Fixed (mod')
 import Wavetable (Wavetable)
 import Helpers
@@ -170,11 +170,11 @@ mix (Oscillator get1 store1 p1) (Oscillator get2 store2 _) =
         out2 <- get2 param dt .@ _2
         return (0.5*out1 + 0.5*out2)
 
-noisy :: RandomGen g => g -> Oscillator a -> Oscillator a
-noisy g (Oscillator getSample store param) = (Oscillator getSample' store' param)
+noisy :: RandomGen g => g -> Volume -> Oscillator a -> Oscillator a
+noisy g noiseMix (Oscillator getSample store param) = (Oscillator getSample' store' param)
   where
     store' = (store, g)
     getSample' param dt = do
       output <- getSample param dt .@ _1
       noise <- randomOscReader () dt .@ _2
-      return (0.7*output + 0.3*noise)
+      return ((1-noiseMix)*output + noiseMix*noise)

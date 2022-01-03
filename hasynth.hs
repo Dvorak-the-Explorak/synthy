@@ -108,7 +108,7 @@ main = do
   -- let wtOsc = wavetableOsc $ loadWavetable 2048 wav
   
   g <- newStdGen
-  let synth = defaultSynth & voiceTemplate.osc .~ (noisy g sawOsc) 
+  let synth = defaultSynth & voiceTemplate.osc .~ (noisy g 0.4 sawOsc) 
   -- let synth = defaultSynth
 
   let midiFile = "c_major.mid"

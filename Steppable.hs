@@ -20,4 +20,4 @@ class Steppable a s where
 
 instance Steppable a s => Steppable [a] [s] where
   -- step :: Seconds -> State 
-  step dt = stateMap (step dt)
+  step dt = stateMap $ step dt
