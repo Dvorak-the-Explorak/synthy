@@ -53,7 +53,7 @@ makeLenses ''Oscillator
 -- ==========================================
 
 -- step :: Seconds -> State (Oscillator a) Pulse
-instance Steppable Pulse (Oscillator a) where
+instance Steppable Seconds Pulse (Oscillator a) where
   step dt = state $ \(Oscillator getSample s param) -> let
       (output, s') = runState (getSample param dt) s 
     in (output, Oscillator getSample s' param)

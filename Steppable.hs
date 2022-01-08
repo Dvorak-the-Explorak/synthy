@@ -16,13 +16,14 @@ import Helpers
 
 -- The steppable typeclass represents things that can be stepped
 --  ie. have some internal state, and a function to produce a stateful operation on themselves
+-- a Stepp
 
 
 
--- s can be stepped, producing an a
-class Steppable a s where
-  step :: Seconds -> State s a
+-- `s` can be stepped, taking an `a` input, and producing a `b`
+class Steppable a b s where
+  step :: a -> State s b
 
-instance Steppable a s => Steppable [a] [s] where
+instance Steppable a b s => Steppable a [b] [s] where
   -- step :: Seconds -> State 
-  step dt = stateMap $ step dt
+  step inp = stateMap $ step inp

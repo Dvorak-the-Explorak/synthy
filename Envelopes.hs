@@ -28,7 +28,7 @@ data VolEnv = VolEnv {
 -- makes the lenses, calls the lens for _attackSlope just attackSlope
 makeLenses ''VolEnv
 
-instance Steppable Volume VolEnv where
+instance Steppable Seconds Volume VolEnv where
   step dt = do
     slope <- gets envSlope
     vol <- use volume 

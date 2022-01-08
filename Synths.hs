@@ -40,7 +40,7 @@ data FullSynth = FullSynth {
 
 makeFields ''FullSynth
 
-instance Steppable Pulse FullSynth where
+instance Steppable Seconds Pulse FullSynth where
   step dt  = do
     -- step the [Voice]
     -- pulse <- overState voices $ stepVoices dt
@@ -61,7 +61,7 @@ instance Steppable Pulse FullSynth where
     -- voices.each.osc.waveIndex .= (moduland+1)/2
 
     -- -- run the filter to get the output
-    output <- runFilter pulse .@ filt
+    output <- step pulse .@ filt
 
     -- unmodulate the filter cutoff
     filt.param -= strength*moduland

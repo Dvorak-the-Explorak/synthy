@@ -16,6 +16,7 @@ import Control.Monad.State
 import Control.Lens
 
 import General (Pulse, Hz, Volume, Seconds)
+import Steppable
 import Helpers
 
 
@@ -40,10 +41,15 @@ makeFields ''Filter
 
 -- This is made slightly messier because we can't use record accesors or record updates
 --  means lenses don't work either, have to make the whole record at once / pattern match
-runFilter :: Pulse -> State (Filter a) Pulse
-runFilter pulse = state $ \(Filter s param run) -> let 
-    (output, s') = runState (run param pulse) s
-  in (output, Filter s' param run)
+instance Steppable Pulse Pulse (Filter a) where
+  step pulse = state $ \(Filter s param run) -> let 
+      (output, s') = runState (run param pulse) s
+    in (output, Filter s' param run)
+    
+-- runFilter :: Pulse -> State (Filter a) Pulse
+-- runFilter pulse = state $ \(Filter s param run) -> let 
+--     (output, s') = runState (run param pulse) s
+--   in (output, Filter s' param run)
   
 
 

@@ -6,7 +6,7 @@
            , FlexibleContexts
            , RankNTypes
            , ExistentialQuantification
-           , LambdaCase
+           , ScopedTypeVariables
   #-}
 
 module Voices where
@@ -64,17 +64,17 @@ data Voice s b = Voice {
 makeFields ''Voice
 
 
-instance Steppable Pulse s => Steppable Pulse (Voice s b) where
+instance Steppable Seconds Pulse s => Steppable Seconds Pulse (Voice s b) where
   step dt =  do
     -- run the filter envelope and update the filter frequency
     stepFilterEnv dt
 
     -- run the oscillator and the volume envelope
-    pulse <-  step dt .@ source
+    pulse :: Pulse <-  step dt .@ source
     vol <- step dt .@ venv
 
     -- run the filter
-    output <- runFilter (pulse*vol) .@ filt
+    output <- step (pulse*vol) .@ filt
 
     return $ output
 
@@ -134,7 +134,7 @@ releaseMatchingVoice note = onMatchingVoice note releaseVoice
 
 -- ==================================================================================
 
-stepVoices :: Steppable Pulse s => Seconds -> State [Voice s b] Pulse
+stepVoices :: Steppable Seconds Pulse s => Seconds -> State [Voice s b] Pulse
 stepVoices dt = do
   output <- fmap sum $ stateMap $ step dt
   cullVoices
