@@ -49,12 +49,12 @@ To be able to use different oscillators*, and use the parameters they expose,
 -- #TODO a voice should be allowed to mix multiple oscillators... 
 --    we could replace Oscillator with [Oscillator]
 
-data Voice s b = Voice {
+data Voice s f = Voice {
   _voiceSource :: s, 
   _voiceVenv :: VolEnv,
   _voiceFiltEnv :: VolEnv,
-  _voiceFilt :: Filter b,
-  _voiceFiltEnvCurve :: (Volume -> b), 
+  _voiceFilt :: f,
+  _voiceFiltModulate :: (Volume -> f -> f), 
   _voiceNote :: NoteNumber
 }
 
@@ -64,7 +64,8 @@ data Voice s b = Voice {
 makeFields ''Voice
 
 
-instance Steppable Seconds Pulse s => Steppable Seconds Pulse (Voice s b) where
+instance (Steppable Seconds Pulse s, Steppable Pulse Pulse b) 
+        => Steppable Seconds Pulse (Voice s b) where
   step dt =  do
     -- run the filter envelope and update the filter frequency
     stepFilterEnv dt
@@ -82,8 +83,8 @@ instance Steppable Seconds Pulse s => Steppable Seconds Pulse (Voice s b) where
 stepFilterEnv :: Seconds -> State (Voice s b) ()
 stepFilterEnv dt = do
   filterFreqOffset <- step dt .@ filtEnv
-  f <- use filtEnvCurve
-  filt.param .= f filterFreqOffset
+  f <- use filtModulate
+  filt %= f filterFreqOffset
 
 
 -- instance FreqField s => FreqField (Voice s b) where
@@ -134,7 +135,8 @@ releaseMatchingVoice note = onMatchingVoice note releaseVoice
 
 -- ==================================================================================
 
-stepVoices :: Steppable Seconds Pulse s => Seconds -> State [Voice s b] Pulse
+stepVoices :: (Steppable Seconds Pulse s, Steppable Pulse Pulse b) 
+        => Seconds -> State [Voice s b] Pulse
 stepVoices dt = do
   output <- fmap sum $ stateMap $ step dt
   cullVoices
@@ -178,7 +180,7 @@ noteOffVoices noteNum = modify $ releaseVoices noteNum
 
 
 -- #TODO default voice could be better thought through
-defaultVoice :: s -> Voice s Hz
+defaultVoice :: s -> Voice s (Filter FreqParam)
 defaultVoice source = Voice {
     _voiceSource = source,
     _voiceVenv = VolEnv {
@@ -189,7 +191,7 @@ defaultVoice source = Voice {
         _attackSlope=20, _decaySlope=8, _sustainLevel=0.01, 
         _releaseSlope=1, _currentState=EnvAttack, _volume=0
     },
-    _voiceFilt = (lowPass (1/sampleRate)) & param .~ 400,
-    _voiceFiltEnvCurve = (\v -> 800 + 16000*v),
+    _voiceFilt = (lowPass (1/sampleRate)) & freq .~ 400,
+    _voiceFiltModulate = (\ v f -> f & freq .~ 800 + 16000*v),
     _voiceNote = 0
 }

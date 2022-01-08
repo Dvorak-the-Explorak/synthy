@@ -31,11 +31,11 @@ import Parameterised
 -- FullSynth represents one polyphonic instrument (homogenous voice types)
 -- FullSynth is just a [Voice] with a global filter, modulated by LFO
 data FullSynth = FullSynth {
-  _fullSynthVoices :: [Voice (Oscillator FreqParam) Hz], 
-  _fullSynthFilt :: Filter Hz,
+  _fullSynthVoices :: [Voice (Oscillator FreqParam) (Filter FreqParam)], 
+  _fullSynthFilt :: Filter Float,
   _fullSynthLfo :: Oscillator FreqParam,
   _fullSynthLfoStrength :: Float,
-  _fullSynthVoiceTemplate :: Voice (Oscillator FreqParam) Hz
+  _fullSynthVoiceTemplate :: Voice (Oscillator FreqParam) (Filter FreqParam)
 }
 
 makeFields ''FullSynth
@@ -52,8 +52,6 @@ instance Steppable Seconds Pulse FullSynth where
 
     -- modulate the filter cutoff with the LFO
     filt.param += strength*moduland
-
-
 
     -- -- modulate wavetable indices
     -- -- modify $ over voices $ map (osc.waveIndex .~ (moduland+1)/2)

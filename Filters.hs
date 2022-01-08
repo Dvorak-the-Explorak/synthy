@@ -18,6 +18,7 @@ import Control.Lens
 import General (Pulse, Hz, Volume, Seconds)
 import Steppable
 import Helpers
+import Parameterised
 
 
 -- type variable a indicates what parameters the filter exposes
@@ -46,12 +47,11 @@ instance Steppable Pulse Pulse (Filter a) where
       (output, s') = runState (run param pulse) s
     in (output, Filter s' param run)
     
--- runFilter :: Pulse -> State (Filter a) Pulse
--- runFilter pulse = state $ \(Filter s param run) -> let 
---     (output, s') = runState (run param pulse) s
---   in (output, Filter s' param run)
-  
+instance FreqField a => FreqField (Filter a) where
+  freq = param.freq
 
+instance WaveIndexField a => WaveIndexField (Filter a) where
+  waveIndex = param.waveIndex
 
 -- apply a function to the filter output
 mapFilterOutput :: (Pulse -> Pulse) -> Filter a -> Filter a
@@ -112,26 +112,26 @@ joinFilters secondInput getResult (Filter s1 p1 r1) (Filter s2 p2 r2) = let
 
 -- ================================================================
 
-bandPass :: Seconds -> Filter (Hz,Hz)
+bandPass :: Seconds -> Filter (FreqParam,FreqParam)
 bandPass dt = highPass dt ~> lowPass dt
 
-centeredBandPass :: Seconds -> Filter (Hz,Hz)
+centeredBandPass :: Seconds -> Filter (FreqParam,FreqParam)
 centeredBandPass dt = let 
-    packParam = \(lo, hi) -> ((lo+hi)/2, hi-lo)
-    getParam = \(center, bandwidth) -> (center-bandwidth, center+bandwidth)
+    packParam = \(FreqParam lo, FreqParam hi) -> (FreqParam $ (lo+hi)/2, FreqParam $ hi-lo)
+    getParam = \(FreqParam center, FreqParam bandwidth) -> (FreqParam $ center-bandwidth, FreqParam $ center+bandwidth)
   in sequenceFiltersPacked packParam getParam (highPass dt) (lowPass dt)
 
-lowPass :: Seconds -> Filter Hz 
+lowPass :: Seconds -> Filter FreqParam 
 lowPass dt = Filter {
   _filterStorage = 0,
-  _filterParam = 0,
+  _filterParam = FreqParam 0,
   _filterRun = lowPassFunc dt
 }
 
-highPass :: Seconds -> Filter Hz
+highPass :: Seconds -> Filter FreqParam
 highPass dt = Filter {
   _filterStorage = (0,0),
-  _filterParam = 0,
+  _filterParam = FreqParam 0,
   _filterRun = highPassFunc dt
 }
 
@@ -168,8 +168,8 @@ gainFilter = Filter () 1 (\gain -> return . (*gain))
 hashtagNoFilterFunc :: FilterFunc () a
 hashtagNoFilterFunc _ = return 
 
-lowPassFunc :: Seconds -> FilterFunc Pulse Hz
-lowPassFunc dt = (\cutoff pulse -> state $ \prev -> 
+lowPassFunc :: Seconds -> FilterFunc Pulse FreqParam
+lowPassFunc dt = (\(FreqParam cutoff) pulse -> state $ \prev -> 
   let 
     rc = 1/(2*pi*cutoff)
     alpha = dt / (rc + dt)
@@ -178,8 +178,8 @@ lowPassFunc dt = (\cutoff pulse -> state $ \prev ->
   )
 
 
-highPassFunc :: Seconds -> FilterFunc (Pulse,Pulse) Hz
-highPassFunc dt = (\cutoff pulse -> state $ \(prevOut, prevIn) -> 
+highPassFunc :: Seconds -> FilterFunc (Pulse,Pulse) FreqParam
+highPassFunc dt = (\(FreqParam cutoff) pulse -> state $ \(prevOut, prevIn) -> 
     let 
       rc = 1/(2*pi*cutoff)
       alpha = rc / (rc + dt)
