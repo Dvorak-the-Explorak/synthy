@@ -28,7 +28,7 @@ instance FreqField WavetableParam where
 
 
 class WaveIndexField s where
-  waveIndex :: Lens' s WaveIndex
+  waveIndex :: Setter' s WaveIndex
 
 
 instance WaveIndexField WavetableParam where

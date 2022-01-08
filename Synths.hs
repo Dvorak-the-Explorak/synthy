@@ -7,8 +7,17 @@
 
 module Synths where
 
+import Control.Monad.State
+import Data.Maybe (catMaybes)
+import Control.Lens
+import Debug.Trace
+
+import Codec.Midi
+
 import General (Seconds, Pulse, sampleRate, Hz)
-import Voices (Voice(..), initialiseVoice, defaultVoice, releaseVoice, restartVoice, note, venv, osc)
+import Voices (Voice(..), initialiseVoice, defaultVoice, 
+          stepVoices, noteOnVoicesWith, noteOffVoices, releaseVoice,
+          note, voiceFinished)
 import Filters
 import Helpers ((.@), stateMap, mapWhere, iterateState, iterateStateUntil)
 import MidiStuff (NoteNumber)
@@ -17,21 +26,16 @@ import Oscillators
 import Steppable
 import Parameterised
 
-import Control.Monad.State
-import Control.Lens
-import Debug.Trace
-
-import Codec.Midi
 
 
 -- FullSynth represents one polyphonic instrument (homogenous voice types)
 -- FullSynth is just a [Voice] with a global filter, modulated by LFO
 data FullSynth = FullSynth {
-  _fullSynthVoices :: [Voice FreqParam Hz], 
+  _fullSynthVoices :: [Voice (Oscillator FreqParam) Hz], 
   _fullSynthFilt :: Filter Hz,
   _fullSynthLfo :: Oscillator FreqParam,
   _fullSynthLfoStrength :: Float,
-  _fullSynthVoiceTemplate :: Voice FreqParam Hz
+  _fullSynthVoiceTemplate :: Voice (Oscillator FreqParam) Hz
 }
 
 makeFields ''FullSynth
@@ -49,6 +53,8 @@ instance Steppable Pulse FullSynth where
     -- modulate the filter cutoff with the LFO
     filt.param += strength*moduland
 
+
+
     -- -- modulate wavetable indices
     -- -- modify $ over voices $ map (osc.waveIndex .~ (moduland+1)/2)
     -- -- voices %= map (osc.waveIndex .~ (moduland+1)/2)
@@ -63,42 +69,10 @@ instance Steppable Pulse FullSynth where
     -- give some headroom 
     return $ 0.1*output
 
-stepVoices :: Seconds -> State [Voice a b] Pulse
-stepVoices dt = do
-  output <- fmap sum $ stateMap $ step dt
-  cullVoices
-  return output
-
-cullVoices :: State [Voice a b] ()
-cullVoices = modify (filter running)
-  where running = views (venv . currentState) (<EnvDone)
-
--- send any voice with given noteNumber back to the start of its envelope
-restartVoices :: NoteNumber -> [Voice a b] -> [Voice a b]
-restartVoices noteNum voices = mapWhere ((==noteNum) . (view note)) restartVoice voices
-
--- noteOff any voice with given noteNumber (send them to the release part of envelope)
-releaseVoices :: NoteNumber -> [Voice a b] -> [Voice a b]
-releaseVoices noteNum voices = mapWhere ((==noteNum) . (view note)) releaseVoice voices
-
--- if there are any voices for that note, set the envelope to EnvAttack state
---  otherwise add a new voice for the note
-noteOnVoicesWith :: (NoteNumber -> Voice a b) ->  NoteNumber -> State [Voice a b] ()
-noteOnVoicesWith makeVoice noteNum = modify $ \voices -> 
-    if any ((==noteNum) . (view note)) voices
-      -- revert envelope to state 1
-      then restartVoices noteNum voices
-      -- add a new voice for that note
-      else (makeVoice noteNum ):voices
-
--- set the envelope of any voices with the corrseponding note to EnvRelease state
-noteOffVoices :: NoteNumber -> State [Voice a b] ()
-noteOffVoices noteNum = modify $ releaseVoices noteNum 
-
 -- ===================================================================================
 
 
-
+-- Kill any remaining notes, wait for them to ring out
 runFullSynthANiente :: Seconds -> State FullSynth [Pulse]
 runFullSynthANiente dt = do
   noteOffAllFullSynth
@@ -131,7 +105,7 @@ runFullSynth dt | dt < (1.0/sampleRate) = return []
 noteOnFullSynth :: NoteNumber -> State FullSynth ()
 noteOnFullSynth note = do
   newVoice <- use voiceTemplate
-  noteOnVoicesWith (initialiseVoice newVoice) note .@ voices
+  noteOnVoicesWith (initialiseVoice  newVoice) note .@ voices
 
 noteOffFullSynth :: NoteNumber -> State FullSynth ()
 noteOffFullSynth note = noteOffVoices note .@ voices
@@ -168,7 +142,7 @@ defaultSynth = FullSynth {
   -- _fullSynthFilt = hashtagNoFilter (0,0),
   _fullSynthLfo = lfo1s & freq .~ 0.4,
   _fullSynthLfoStrength = 0.2, -- 400 * 10,
-  _fullSynthVoiceTemplate = defaultVoice
+  _fullSynthVoiceTemplate = defaultVoice sawOsc
 }
 
 

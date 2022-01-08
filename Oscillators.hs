@@ -34,6 +34,7 @@ import Debug.Trace
 
 -- pure waveform, can evaluate its pulse from just phase
 type Waveform = Phase -> Pulse
+
 -- also takes wave index
 type OscReader s a = a -> Seconds -> State s Pulse
 
@@ -134,6 +135,10 @@ lfo1s = Oscillator
     , _oscStorage = 0
     , _oscParams = FreqParam 1}
 
+
+
+
+
 simpleOsc :: Waveform -> Oscillator FreqParam
 simpleOsc wf =  Oscillator 
     { _getSample = simpleOscReader wf
@@ -178,3 +183,19 @@ noisy g noiseMix (Oscillator getSample store param) = (Oscillator getSample' sto
       output <- getSample param dt .@ _1
       noise <- randomOscReader () dt .@ _2
       return ((1-noiseMix)*output + noiseMix*noise)
+
+
+
+
+-- data SimpleOscillator = SimpleOscillator 
+--   { phase :: Phase  
+--   , freqency :: Hz
+--   , wave :: Waveform
+--   }
+
+-- instance Steppable Pulse SimpleOscillator where
+--   step dt = do
+--     (SimpleOscillator p f w) <- get
+--     p' = (`mod'` 1.0) $ p + dt*f
+--     put (SimpleOscillator p' f w)
+--     return $ w p'

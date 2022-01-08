@@ -77,15 +77,15 @@
   (major1) == 1 && (major2) == 7 && (minor) <= 10)
 #endif /* MIN_VERSION_extra */
 
-/* package lens-5.0.1 */
+/* package lens-5.1 */
 #ifndef VERSION_lens
-#define VERSION_lens "5.0.1"
+#define VERSION_lens "5.1"
 #endif /* VERSION_lens */
 #ifndef MIN_VERSION_lens
 #define MIN_VERSION_lens(major1,major2,minor) (\
   (major1) <  5 || \
-  (major1) == 5 && (major2) <  0 || \
-  (major1) == 5 && (major2) == 0 && (minor) <= 1)
+  (major1) == 5 && (major2) <  1 || \
+  (major1) == 5 && (major2) == 1 && (minor) <= 0)
 #endif /* MIN_VERSION_lens */
 
 /* package mtl-2.2.2 */
@@ -132,9 +132,9 @@
   (major1) == 0 && (major2) == 0 && (minor) <= 16)
 #endif /* MIN_VERSION_utility_ht */
 
-/* package vector-0.12.3.0 */
+/* package vector-0.12.3.1 */
 #ifndef VERSION_vector
-#define VERSION_vector "0.12.3.0"
+#define VERSION_vector "0.12.3.1"
 #endif /* VERSION_vector */
 #ifndef MIN_VERSION_vector
 #define MIN_VERSION_vector(major1,major2,minor) (\
