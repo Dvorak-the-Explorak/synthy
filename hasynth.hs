@@ -77,7 +77,7 @@ performMidiSquare = performMidiWithOscillator squareOsc
 performMidiSine = performMidiWithOscillator sineOsc
 
 performMidiWithOscillator :: Oscillator FreqParam -> Track Ticks -> [Pulse]
-performMidiWithOscillator osc_ = performMidiWithSynth $ defaultSynth & voiceTemplate.osc .~ osc_
+performMidiWithOscillator osc_ = performMidiWithSynth $ defaultSynth & voiceTemplate.source .~ osc_
 
 -- =====================================================
 -- =====================================================
@@ -108,12 +108,12 @@ main = do
   -- let wtOsc = wavetableOsc $ loadWavetable 2048 wav
   
   g <- newStdGen
-  let synth = defaultSynth & voiceTemplate.osc .~ (noisy g 0.4 sawOsc) 
+  let synth = defaultSynth & voiceTemplate.source .~ (noisy g 0.4 sawOsc) 
   -- let synth = defaultSynth
 
   let midiFile = "c_major.mid"
   putStrLn $ printf $ "Playing " ++ midiFile
-  -- playWithSynth (defaultSynth & voiceTemplate.osc .~ wtOsc) midiFile
+  -- playWithSynth (defaultSynth & voiceTemplate.source .~ wtOsc) midiFile
   playWithSynth synth midiFile
   putStrLn $ "made " ++ outputFile
 

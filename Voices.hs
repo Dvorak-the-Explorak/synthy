@@ -50,7 +50,7 @@ To be able to use different oscillators*, and use the parameters they expose,
 --    we could replace Oscillator with [Oscillator]
 
 data Voice s b = Voice {
-  _voiceOsc :: s, 
+  _voiceSource :: s, 
   _voiceVenv :: VolEnv,
   _voiceFiltEnv :: VolEnv,
   _voiceFilt :: Filter b,
@@ -70,7 +70,7 @@ instance Steppable Pulse s => Steppable Pulse (Voice s b) where
     stepFilterEnv dt
 
     -- run the oscillator and the volume envelope
-    pulse <-  step dt .@ osc
+    pulse <-  step dt .@ source
     vol <- step dt .@ venv
 
     -- run the filter
@@ -87,15 +87,15 @@ stepFilterEnv dt = do
 
 
 -- instance FreqField s => FreqField (Voice s b) where
---   freq = osc . freq
+--   freq = source . freq
 
 -- instance WaveIndexField s => WaveIndexField (Voice s b) where
---   waveIndex = osc . waveIndex
+--   waveIndex = source . waveIndex
 
 -- =======================================================================
 
 initialiseVoice :: FreqField s => Voice s b -> NoteNumber -> Voice s b
-initialiseVoice v noteNum = v & osc . freq .~ hzFromNoteNumber noteNum
+initialiseVoice v noteNum = v & source . freq .~ hzFromNoteNumber noteNum
                               & note .~ noteNum
 
 
@@ -180,7 +180,7 @@ noteOffVoices noteNum = modify $ releaseVoices noteNum
 -- #TODO default voice could be better thought through
 defaultVoice :: s -> Voice s Hz
 defaultVoice source = Voice {
-    _voiceOsc = source,
+    _voiceSource = source,
     _voiceVenv = VolEnv {
         _attackSlope=20, _decaySlope=2, _sustainLevel=0.7, 
         _releaseSlope=2, _currentState=EnvAttack, _volume=0
