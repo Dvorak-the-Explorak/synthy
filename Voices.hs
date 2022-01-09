@@ -75,7 +75,6 @@ instance FreqField s => IsVoice (Voice s f) where
   noteOn note template = noteOnVoicesWith (initialiseVoice template) note
   noteOff note = noteOffVoices note
 
-
 -- Source == Steppable Seconds Pulse
 instance (Source s, Transformer f) 
         => Steppable Seconds Pulse (Voice s f) where

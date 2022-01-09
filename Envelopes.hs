@@ -16,6 +16,7 @@ import Steppable
 
 data EnvSegment = EnvAttack | EnvDecay | EnvSustain | EnvRelease | EnvDone
   deriving (Eq, Ord, Enum, Show)
+
 data VolEnv = VolEnv {
   _attackSlope :: Float,
   _decaySlope :: Float,

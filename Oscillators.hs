@@ -26,6 +26,7 @@ import Control.Monad.State
 import Control.Monad.Reader
 import Control.Lens
 import System.Random
+import Data.List.Extra ((!?))
 
 import General
 import Data.Fixed (mod')
@@ -49,6 +50,8 @@ instance FreqField SimpleOscStore where
       set _ x = SimpleOscStore x
 
 
+
+
 newtype WavetableOscStore = WavetableOscStore (Phase, WaveIndex, Hz)
 type WavetableOsc = Kernel WavetableOscStore Seconds Pulse
 
@@ -65,30 +68,47 @@ instance WaveIndexField WavetableOscStore where
       set (WavetableOscStore s) x = WavetableOscStore x
 
 
+
+
+newtype OneshotOscStore = OneshotOscStore ([Pulse], Seconds, Seconds)
+type OneshotOsc = Kernel OneshotOscStore Seconds Pulse
+
+
 -- ======================================================================
 
 
 updatePhase dt freq_ phase_ = (`mod'` 1.0) $ phase_ + dt*freq_
  
 
-simpleOscReader :: Waveform -> (Seconds -> State SimpleOscStore Pulse)
-simpleOscReader wf = \dt -> do
+stepSimpleOsc :: Waveform -> (Seconds -> State SimpleOscStore Pulse)
+stepSimpleOsc wf = \dt -> do
   SimpleOscStore (_phase, _freq) <- get
   let _phase' = updatePhase dt _freq _phase
   put $ SimpleOscStore (_phase', _freq)
   return $ wf _phase'
 
-wavetableReader :: Wavetable -> (Seconds -> State WavetableOscStore Pulse)
-wavetableReader f = \dt -> do
+stepWavetableOsc :: Wavetable -> (Seconds -> State WavetableOscStore Pulse)
+stepWavetableOsc f = \dt -> do
   WavetableOscStore (_phase, _waveIndex, _freq) <- get
   let _phase' = updatePhase dt _freq _phase
   put $ WavetableOscStore (_phase', _waveIndex, _freq)
   return $ f _waveIndex _phase
 
 
-randomOscReader :: RandomGen g => (Seconds -> State g Pulse)
-randomOscReader = \dt -> state $ uniformR (0.0, 1.0)
+stepRandomOsc :: RandomGen g => (Seconds -> State g Pulse)
+stepRandomOsc = \dt -> state $ uniformR (0.0, 1.0)
   
+
+stepOneshotOsc :: Seconds -> State OneshotOscStore Pulse
+stepOneshotOsc = \dt -> do
+  OneshotOscStore (pulses, rate, t) <- get
+  let t' = t + dt
+  let index = floor $ t' / rate
+  let output = case pulses !? index of
+            Nothing -> 0.0
+            Just x -> x  
+  put $ OneshotOscStore (pulses, rate, t')
+  return output
 
 
 -- ============================================================
@@ -107,13 +127,19 @@ squareTone = (\t -> if (t `mod'` 1.0 < 0.5) then -1.0 else 1.0)
 -- ============================================================
 
 
-waveformFromSamples :: [Float] -> Waveform
+waveformFromSamples :: [Pulse] -> Waveform
 waveformFromSamples vals = \x -> let
     step = 1.0 / (fromIntegral $ length vals - 1)
     i = (floor $ (x/step)) `mod` (length vals)
     next = (i+1) `mod` (length vals)
     frac = (x - (fromIntegral i)*step)/step
   in (vals !! i) + frac * ((vals !! next) - (vals !! i))
+
+makeOneshot :: [Pulse] -> Seconds -> OneshotOsc
+makeOneshot pulses sampleRate = Kernel 
+  { _storage = OneshotOscStore (pulses, sampleRate, 0)
+  , _doStep = stepOneshotOsc
+  }
 
 -- ==========================================================
 
@@ -127,7 +153,7 @@ lfo1s = simpleOsc pureTone & freq .~ 1
 simpleOsc :: Waveform -> SimpleOsc
 simpleOsc wf = Kernel 
   { _storage = SimpleOscStore (0,0)
-  , _doStep = simpleOscReader wf }
+  , _doStep = stepSimpleOsc wf }
 
 sawOsc = simpleOsc sawTone
 squareOsc = simpleOsc squareTone
@@ -137,14 +163,14 @@ sineOsc = simpleOsc pureTone
 wavetableOsc :: Wavetable -> WavetableOsc
 wavetableOsc table =  Kernel
   { _storage = WavetableOscStore (0, 0, 0)
-  , _doStep = wavetableReader table
+  , _doStep = stepWavetableOsc table
   }
 
 
 whiteNoiseOsc :: RandomGen g => g -> Kernel g Seconds Pulse
 whiteNoiseOsc g = Kernel
   { _storage = g
-  , _doStep = randomOscReader
+  , _doStep = stepRandomOsc
   }
 
 -- =============================================================
@@ -169,7 +195,7 @@ noisy g noiseMix (Kernel _storage _doStep) = (Kernel _storage' _doStep')
 
     _doStep' dt = do
       output <- _doStep dt .@ _1
-      noise <- randomOscReader dt .@ _2
+      noise <- stepRandomOsc dt .@ _2
       return ((1-noiseMix)*output + noiseMix*noise)
 
 
