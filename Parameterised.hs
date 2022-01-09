@@ -3,6 +3,9 @@ module Parameterised where
 import Control.Lens
 
 import General
+import Steppable
+
+
 
 
 newtype FreqParam = FreqParam Hz
@@ -24,12 +27,15 @@ instance FreqField WavetableParam where
       get (WavetableParam (_,f)) = f
       set (WavetableParam (wi,_)) x = WavetableParam (wi,x)
 
+instance FreqField s => FreqField (Kernel s i o) where
+  freq = storage . freq
 
 
+
+-- ===========================================================================================
 
 class WaveIndexField s where
   waveIndex :: Setter' s WaveIndex
-
 
 instance WaveIndexField WavetableParam where
   waveIndex = lens get set
@@ -37,4 +43,5 @@ instance WaveIndexField WavetableParam where
       get (WavetableParam (wi,_)) = wi
       set (WavetableParam (_,f)) x = WavetableParam (x,f)
 
-
+instance WaveIndexField s => WaveIndexField (Kernel s i o) where
+  waveIndex = storage . waveIndex

@@ -47,8 +47,23 @@ data Oscillator a = forall s . Oscillator {
   _oscParams :: a
 } 
 
+
+type SimpleOscillatorOld = Oscillator (FreqParam)
+
+newtype SimpleOscStore = SimpleOscStore { unSimpleOscStore :: (Phase, Hz) }
+
+type SimpleOsc = (Kernel SimpleOscStore Seconds Pulse)
+
+
 -- makes the lenses, calls the lens for _getSample just getSample
 makeLenses ''Oscillator
+
+instance FreqField SimpleOscStore where
+  freq = lens get set
+    where
+      get (SimpleOscStore s) = snd s 
+      set (SimpleOscStore (p,_)) x = SimpleOscStore (p,x)
+
 
 -- ==========================================
 
@@ -76,10 +91,17 @@ updatePhase dt freq_ phase_ = (`mod'` 1.0) $ phase_ + dt*freq_
 
 -- stores the phase, freq as param
 -- Waveform :: Phase -> Pulse
-simpleOscReader :: Waveform -> OscReader Phase FreqParam
-simpleOscReader f = 
+simpleOscReaderOld :: Waveform -> OscReader Phase FreqParam
+simpleOscReaderOld f = 
   \(FreqParam freq_) dt -> 
     modify (updatePhase dt freq_) >> gets f 
+
+simpleOscReader :: Waveform -> (Seconds -> State SimpleOscStore Pulse)
+simpleOscReader wf = \dt -> do
+  SimpleOscStore (_phase, _freq) <- get
+  let _phase' = updatePhase dt _freq _phase
+  put $ SimpleOscStore (_phase', _freq)
+  return $ wf _phase'
 
 -- Wavetable :: (WaveIndex -> Phase -> Pulse)
 wavetableReader :: Wavetable -> OscReader Phase WavetableParam
@@ -122,28 +144,23 @@ waveformFromSamples vals = \x -> let
 
 -- ==========================================================
 
-zeroOsc :: Oscillator FreqParam
-zeroOsc = Oscillator {
-  _getSample = simpleOscReader $ const 0,
-  _oscStorage = 0,
-  _oscParams = FreqParam 0
-}
+zeroOsc :: SimpleOsc
+zeroOsc = simpleOsc (const 0)
 
-lfo1s :: Oscillator FreqParam
-lfo1s = Oscillator 
-    { _getSample = simpleOscReader pureTone
-    , _oscStorage = 0
-    , _oscParams = FreqParam 1}
+lfo1s :: SimpleOsc
+lfo1s = simpleOsc pureTone & freq .~ 1
 
+simpleOscOld :: Waveform -> SimpleOscillatorOld
+simpleOscOld wf =  Oscillator 
+  { _getSample = simpleOscReaderOld wf
+  , _oscStorage = 0 -- phase
+  , _oscParams = FreqParam 0
+  }
 
-
-
-
-simpleOsc :: Waveform -> Oscillator FreqParam
-simpleOsc wf =  Oscillator 
-    { _getSample = simpleOscReader wf
-    , _oscStorage = 0 -- phase
-    , _oscParams = FreqParam 0}
+simpleOsc :: Waveform -> SimpleOsc
+simpleOsc wf = Kernel 
+  { _storage = SimpleOscStore (0,0)
+  , _doStep = simpleOscReader wf }
 
 sawOsc = simpleOsc sawTone
 squareOsc = simpleOsc squareTone
@@ -151,15 +168,17 @@ sineOsc = simpleOsc pureTone
 
 wavetableOsc :: Wavetable -> Oscillator WavetableParam
 wavetableOsc table =  Oscillator 
-    { _getSample = wavetableReader table
-    , _oscStorage = 0 -- phase
-    , _oscParams = WavetableParam (0, 0)}
+  { _getSample = wavetableReader table
+  , _oscStorage = 0 -- phase
+  , _oscParams = WavetableParam (0, 0)
+  }
 
 whiteNoiseOsc :: RandomGen g => g -> Oscillator ()
 whiteNoiseOsc g = Oscillator
   { _getSample = randomOscReader
   , _oscStorage = g
-  , _oscParams = ()}
+  , _oscParams = ()
+  }
 
 -- =============================================================
 
@@ -175,27 +194,25 @@ mix (Oscillator get1 store1 p1) (Oscillator get2 store2 _) =
         out2 <- get2 param dt .@ _2
         return (0.5*out1 + 0.5*out2)
 
-noisy :: RandomGen g => g -> Volume -> Oscillator a -> Oscillator a
-noisy g noiseMix (Oscillator getSample store param) = (Oscillator getSample' store' param)
+
+
+-- noisy :: RandomGen g => g -> Volume -> Oscillator a -> Oscillator a
+-- noisy g noiseMix (Oscillator getSample store param) = (Oscillator getSample' store' param)
+--   where
+--     store' = (store, g)
+--     getSample' param dt = do
+--       output <- getSample param dt .@ _1
+--       noise <- randomOscReader () dt .@ _2
+--       return ((1-noiseMix)*output + noiseMix*noise)
+
+noisy :: RandomGen g => g -> Volume -> Kernel s Seconds Pulse -> Kernel (s, g) Seconds Pulse
+noisy g noiseMix (Kernel _storage _doStep) = (Kernel _storage' _doStep')
   where
-    store' = (store, g)
-    getSample' param dt = do
-      output <- getSample param dt .@ _1
+    _storage' = (_storage, g)
+
+    _doStep' dt = do
+      output <- _doStep dt .@ _1
       noise <- randomOscReader () dt .@ _2
       return ((1-noiseMix)*output + noiseMix*noise)
 
 
-
-
--- data SimpleOscillator = SimpleOscillator 
---   { phase :: Phase  
---   , freqency :: Hz
---   , wave :: Waveform
---   }
-
--- instance Steppable Pulse SimpleOscillator where
---   step dt = do
---     (SimpleOscillator p f w) <- get
---     p' = (`mod'` 1.0) $ p + dt*f
---     put (SimpleOscillator p' f w)
---     return $ w p'

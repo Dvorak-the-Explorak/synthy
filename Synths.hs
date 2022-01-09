@@ -3,6 +3,7 @@
            , TemplateHaskell
            , TypeSynonymInstances
            , FlexibleInstances
+           , FlexibleContexts
   #-}
 
 module Synths where
@@ -30,17 +31,19 @@ import Parameterised
 
 -- FullSynth represents one polyphonic instrument (homogenous voice types)
 -- FullSynth is just a [Voice] with a global filter, modulated by LFO
-data FullSynth = FullSynth {
-  _fullSynthVoices :: [Voice (Oscillator FreqParam) (Filter FreqParam)], 
+
+-- type parameter s is the type of oscillator...
+data FullSynth s = FullSynth {
+  _fullSynthVoices :: [Voice s (Filter FreqParam)], 
   _fullSynthFilt :: Filter Float,
-  _fullSynthLfo :: Oscillator FreqParam,
+  _fullSynthLfo :: SimpleOsc,
   _fullSynthLfoStrength :: Float,
-  _fullSynthVoiceTemplate :: Voice (Oscillator FreqParam) (Filter FreqParam)
+  _fullSynthVoiceTemplate :: Voice s (Filter FreqParam)
 }
 
 makeFields ''FullSynth
 
-instance Steppable Seconds Pulse FullSynth where
+instance Steppable Seconds Pulse s => Steppable Seconds Pulse (FullSynth s) where
   step dt  = do
     -- step the [Voice]
     -- pulse <- overState voices $ stepVoices dt
@@ -71,12 +74,12 @@ instance Steppable Seconds Pulse FullSynth where
 
 
 -- Kill any remaining notes, wait for them to ring out
-runFullSynthANiente :: Seconds -> State FullSynth [Pulse]
+runFullSynthANiente :: Steppable Seconds Pulse s => Seconds -> State (FullSynth s) [Pulse]
 runFullSynthANiente dt = do
   noteOffAllFullSynth
   iterateStateUntil (uses voices null) (step dt)
 
-runFullSynthSteps :: Int -> Seconds -> State FullSynth [Pulse]
+runFullSynthSteps :: Steppable Seconds Pulse s => Int -> Seconds -> State (FullSynth s) [Pulse]
 -- runFullSynthSteps 0 dt = return []
 -- runFullSynthSteps n dt = do
 --   pulse <- stepFullSynth dt
@@ -89,7 +92,7 @@ runFullSynthSteps n dt = iterateState n (step dt)
 --    as they're only culled once per call to runSynthSteps
 --    and leaving them in the EnvDone state will waste time calculating zeros
 -- #TODO could the EnvDone state be signalled somehow to automate the culling?
-runFullSynth :: Seconds -> State FullSynth [Pulse]
+runFullSynth :: Steppable Seconds Pulse s => Seconds -> State (FullSynth s) [Pulse]
 runFullSynth dt | dt < (1.0/sampleRate) = return []
                 | dt > 1.0 = do 
                     firstSec <- runFullSynthSteps (floor sampleRate) (1.0/sampleRate)
@@ -100,22 +103,24 @@ runFullSynth dt | dt < (1.0/sampleRate) = return []
 
 
 
-noteOnFullSynth :: NoteNumber -> State FullSynth ()
+noteOnFullSynth :: (Steppable Seconds Pulse s, FreqField s) => 
+                    NoteNumber -> State (FullSynth s) ()
 noteOnFullSynth note = do
   newVoice <- use voiceTemplate
-  noteOnVoicesWith (initialiseVoice  newVoice) note .@ voices
+  noteOnVoicesWith (initialiseVoice newVoice) note .@ voices
 
-noteOffFullSynth :: NoteNumber -> State FullSynth ()
+noteOffFullSynth :: NoteNumber -> State (FullSynth s) ()
 noteOffFullSynth note = noteOffVoices note .@ voices
 
-noteOffAllFullSynth :: State FullSynth ()
+noteOffAllFullSynth :: State (FullSynth s) ()
 noteOffAllFullSynth = voices.each %= releaseVoice
 
 
 -- ================================================================================
 
 
-synthesiseMidiTrack :: Track Ticks -> State FullSynth [Pulse]
+synthesiseMidiTrack :: (Steppable Seconds Pulse s, FreqField s) => 
+                      Track Ticks -> State (FullSynth s) [Pulse]
 synthesiseMidiTrack [] = runFullSynthANiente (1/sampleRate)
 synthesiseMidiTrack ((ticks, message):messages) = do
     output <- runFullSynthSteps ticks (1/sampleRate)
@@ -130,7 +135,7 @@ synthesiseMidiTrack ((ticks, message):messages) = do
 
 
 
-defaultSynth :: FullSynth
+defaultSynth :: FullSynth SimpleOsc
 defaultSynth = FullSynth {
   _fullSynthVoices = ([]), 
   -- _fullSynthFilt = bandPass (1/sampleRate) & param .~ (220, 880),--param is (low, high)

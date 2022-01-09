@@ -87,11 +87,11 @@ stepFilterEnv dt = do
   filt %= f filterFreqOffset
 
 
--- instance FreqField s => FreqField (Voice s b) where
---   freq = source . freq
+instance FreqField s => FreqField (Voice s f) where
+  freq = source . freq
 
--- instance WaveIndexField s => WaveIndexField (Voice s b) where
---   waveIndex = source . waveIndex
+instance WaveIndexField s => WaveIndexField (Voice s f) where
+  waveIndex = source . waveIndex
 
 -- =======================================================================
 
@@ -171,11 +171,6 @@ noteOffVoices noteNum = modify $ releaseVoices noteNum
 
 
 -- ===============================================================================
-
-
-
-
-
 
 
 

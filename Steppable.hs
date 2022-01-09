@@ -1,9 +1,10 @@
 {-# LANGUAGE MultiParamTypeClasses
-             , RankNTypes
-             , ExistentialQuantification 
-             , FlexibleInstances
-             , FlexibleContexts
-             , ConstraintKinds #-}
+            , RankNTypes
+            , ExistentialQuantification 
+            , FlexibleInstances
+            , FlexibleContexts
+            , TemplateHaskell
+            , ConstraintKinds #-}
 module Steppable where
 
 
@@ -27,3 +28,19 @@ class Steppable a b s where
 instance Steppable a b s => Steppable a [b] [s] where
   -- step :: Seconds -> State 
   step inp = stateMap $ step inp
+
+
+
+
+data Kernel s i o = Kernel 
+  { _storage :: s
+  , _doStep :: i -> State s o}
+
+
+-- makes the lenses, calls the lens for _storage just storage
+makeLenses ''Kernel
+
+instance Steppable i o (Kernel s i o) where
+  step inp = state $ \(Kernel _store _doStep) -> let
+      (out,_store') = runState (_doStep inp) _store
+    in (out, Kernel _store' _doStep)

@@ -2,6 +2,7 @@
            , MultiParamTypeClasses
            , TemplateHaskell
            , TypeSynonymInstances
+           , FlexibleContexts
   #-}
 import Prelude hiding (unzip)
 import qualified Data.ByteString.Lazy as B
@@ -24,6 +25,7 @@ import MidiStuff
 import Songs
 import Oscillators
 import Parameterised
+import Steppable
 import Envelopes
 import Filters
 import Voices
@@ -68,7 +70,8 @@ outputFile = "output.bin"
 performMidi :: Track Ticks -> [Pulse]
 performMidi = performMidiSquare
 
-performMidiWithSynth :: FullSynth -> Track Ticks -> [Pulse]
+performMidiWithSynth :: (Steppable Seconds Pulse s, FreqField s) => 
+                        FullSynth s -> Track Ticks -> [Pulse]
 performMidiWithSynth synth track = evalState (synthesiseMidiTrack track) synth
 
 performMidiSaw :: Track Ticks -> [Pulse]
@@ -76,7 +79,7 @@ performMidiSaw = performMidiWithOscillator sawOsc
 performMidiSquare = performMidiWithOscillator squareOsc
 performMidiSine = performMidiWithOscillator sineOsc
 
-performMidiWithOscillator :: Oscillator FreqParam -> Track Ticks -> [Pulse]
+performMidiWithOscillator :: SimpleOsc -> Track Ticks -> [Pulse]
 performMidiWithOscillator osc_ = performMidiWithSynth $ defaultSynth & voiceTemplate.source .~ osc_
 
 -- =====================================================
@@ -108,7 +111,8 @@ main = do
   -- let wtOsc = wavetableOsc $ loadWavetable 2048 wav
   
   g <- newStdGen
-  let synth = defaultSynth & voiceTemplate.source .~ (noisy g 0.4 sawOsc) 
+  -- let synth = defaultSynth & voiceTemplate.source .~ (noisy g 0.4 sawOsc)
+  let synth = defaultSynth
   -- let synth = defaultSynth
 
   let midiFile = "c_major.mid"
@@ -193,7 +197,8 @@ playOnabots = do
 play :: FilePath -> IO ()
 play inputFile = playWithSynth defaultSynth inputFile
 
-playWithSynth :: FullSynth -> FilePath -> IO ()
+playWithSynth :: (Steppable Seconds Pulse s, FreqField s) => 
+                FullSynth s -> FilePath -> IO ()
 playWithSynth synth inputFile = do
   parsedMidi <- fmap (runParser parseMidi) $ B.readFile inputFile
   case parsedMidi of
