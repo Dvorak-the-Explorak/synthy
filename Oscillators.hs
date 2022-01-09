@@ -35,22 +35,6 @@ import Debug.Trace
 -- pure waveform, can evaluate its pulse from just phase
 type Waveform = Phase -> Pulse
 
--- also takes wave index
-type OscReader s a = a -> Seconds -> State s Pulse
-
-
--- #TODO this mirrors the Filter data type very closely, 
---  there could some abstraction to be had here
-data Oscillator a = forall s . Oscillator {
-  _getSample :: OscReader s a,
-  _oscStorage :: s,
-  _oscParams :: a
-} 
-
-
--- makes the lenses, calls the lens for _getSample just getSample
-makeLenses ''Oscillator
-
 
 newtype SimpleOscStore = SimpleOscStore (Phase, Hz)
 type SimpleOsc = (Kernel SimpleOscStore Seconds Pulse)
@@ -76,29 +60,6 @@ instance WaveIndexField WavetableOscStore where
     where
       get (WavetableOscStore s) = s
       set (WavetableOscStore s) x = WavetableOscStore x
-
--- ==========================================
-
--- step :: Seconds -> State (Oscillator a) Pulse
-instance Steppable Seconds Pulse (Oscillator a) where
-  step dt = state $ \(Oscillator getSample s param) -> let
-      (output, s') = runState (getSample param dt) s 
-    in (output, Oscillator getSample s' param)
-
-
-
-
--- if the oscillator's parameter exposes a waveIndex,
---  so too does the oscillator
-instance WaveIndexField p => WaveIndexField (Oscillator p) where
-  waveIndex = oscParams . waveIndex
-
--- if the oscillator's parameter exposes a frequency,
---  so too does the oscillator
-instance FreqField p => FreqField (Oscillator p)where
-  freq = oscParams . freq
-
--- ==================================================
 
 
 updatePhase dt freq_ phase_ = (`mod'` 1.0) $ phase_ + dt*freq_
@@ -198,14 +159,26 @@ whiteNoiseOsc g = Kernel
 
 -- Mix 2 oscillators together 50/50
 -- ignores second oscillator's parameter
-mix :: Oscillator a -> Oscillator a -> Oscillator a
-mix (Oscillator get1 store1 p1) (Oscillator get2 store2 _) = 
-  (Oscillator getSample (store1,store2) p1)
+-- mix :: Oscillator a -> Oscillator a -> Oscillator a
+-- mix (Oscillator get1 store1 p1) (Oscillator get2 store2 _) = 
+--   (Oscillator getSample (store1,store2) p1)
+--     where 
+--       getSample param dt = do
+--         out1 <- get1 param dt .@ _1
+--         out2 <- get2 param dt .@ _2
+--         return (0.5*out1 + 0.5*out2)
+
+
+-- Mix 2 oscillators together 50/50
+mix :: Kernel a Seconds Pulse -> Kernel b Seconds Pulse -> Kernel (a,b) Seconds Pulse
+mix (Kernel s1 doStep1) (Kernel s2 doStep2) = 
+  (Kernel (s1,s2) _doStep)
     where 
-      getSample param dt = do
-        out1 <- get1 param dt .@ _1
-        out2 <- get2 param dt .@ _2
+      _doStep dt = do
+        out1 <- doStep1 dt .@ _1
+        out2 <- doStep2 dt .@ _2
         return (0.5*out1 + 0.5*out2)
+
 
 
 noisy :: RandomGen g => g -> Volume -> Kernel s Seconds Pulse -> Kernel (s, g) Seconds Pulse
