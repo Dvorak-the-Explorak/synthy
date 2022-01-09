@@ -11,8 +11,7 @@
 
 module Voices where
 
--- A voice is a single active oscillator in a synth, attached to one NoteNumber. 
---  it has an oscillator, a volume envelope, a note number, and its own filter.
+-- A voice is an enveloped sound source, with a NoteNumber attached.  
 
 
 
@@ -42,12 +41,17 @@ To be able to use different oscillators*, and use the parameters they expose,
 
 -}
 
+class IsVoice v where
+  restart :: v -> v
+  release :: v -> v
+  finished :: v -> Bool
+  maybeRestart :: NoteNumber -> v -> Maybe v
+  --        | which note to turn on
+  --        |             | voice template to use
+  noteOn :: NoteNumber -> v -> State [v] ()
+  --        | which note to turn off
+  noteOff :: NoteNumber -> State [v] ()
 
-
-
-
--- #TODO a voice should be allowed to mix multiple oscillators... 
---    we could replace Oscillator with [Oscillator]
 
 data Voice s f = Voice {
   _voiceSource :: s, 
@@ -62,6 +66,14 @@ data Voice s f = Voice {
 -- calls the lens for _voiceFiltEnv filtEnv 
 --  using typeclasses so multiple different types can have a filtEnv
 makeFields ''Voice
+
+instance FreqField s => IsVoice (Voice s f) where
+  restart = restartVoice
+  release = releaseVoice
+  finished = voiceFinished
+  maybeRestart = maybeRestartVoice
+  noteOn note template = noteOnVoicesWith (initialiseVoice template) note
+  noteOff note = noteOffVoices note
 
 
 -- Source == Steppable Seconds Pulse
@@ -146,6 +158,10 @@ stepVoices dt = do
 cullVoices :: State [Voice s f] ()
 cullVoices = modify (filter running)
   where running = not . voiceFinished
+
+cullFinished :: IsVoice v => State [v] ()
+cullFinished = modify (filter running)
+  where running = not . finished
 
 -- send any voice with given noteNumber back to the start of its envelope
 restartVoices :: NoteNumber -> [Voice s f] -> [Voice s f]

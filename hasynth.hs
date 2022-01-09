@@ -70,7 +70,7 @@ outputFile = "output.bin"
 performMidi :: Track Ticks -> [Pulse]
 performMidi = performMidiSquare
 
-performMidiWithSynth :: (Steppable Seconds Pulse s, FreqField s) => 
+performMidiWithSynth :: (Source s, FreqField s, IsVoice s) => 
                         FullSynth s -> Track Ticks -> [Pulse]
 performMidiWithSynth synth track = evalState (synthesiseMidiTrack track) synth
 
@@ -197,7 +197,7 @@ playOnabots = do
 play :: FilePath -> IO ()
 play inputFile = playWithSynth defaultSynth inputFile
 
-playWithSynth :: (Steppable Seconds Pulse s, FreqField s) => 
+playWithSynth :: (Source s, FreqField s, IsVoice s) => 
                 FullSynth s -> FilePath -> IO ()
 playWithSynth synth inputFile = do
   parsedMidi <- fmap (runParser parseMidi) $ B.readFile inputFile

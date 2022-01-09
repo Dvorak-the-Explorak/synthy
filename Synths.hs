@@ -13,13 +13,15 @@ import Control.Monad.State
 import Data.Maybe (catMaybes)
 import Control.Lens
 import Debug.Trace
+import Data.List (sum)
 
 import Codec.Midi
 
 import General (Seconds, Pulse, sampleRate, Hz)
-import Voices (Voice(..), initialiseVoice, defaultVoice, 
-          stepVoices, noteOnVoicesWith, noteOffVoices, releaseVoice,
-          note, voiceFinished)
+import Voices
+-- import Voices (Voice(..), IsVoice, initialiseVoice, defaultVoice, 
+--           stepVoices, noteOnVoicesWith, noteOffVoices, releaseVoice,
+--           note, voiceFinished, cullVoices)
 import Filters
 import Helpers ((.@), stateMap, mapWhere, iterateState, iterateStateUntil)
 import MidiStuff (NoteNumber)
@@ -30,26 +32,30 @@ import Parameterised
 
 
 
+
 -- FullSynth represents one polyphonic instrument (homogenous voice types)
 -- FullSynth is just a [Voice] with a global filter, modulated by LFO
 
 -- type parameter s is the type of oscillator...
 data FullSynth s = FullSynth {
-  _fullSynthVoices :: [Voice s (Filter FreqParam)], 
+  _fullSynthVoices :: [s], 
   _fullSynthFilt :: Filter Float,
   _fullSynthLfo :: SimpleOsc,
   _fullSynthLfoStrength :: Float,
-  _fullSynthVoiceTemplate :: Voice s (Filter FreqParam)
+  _fullSynthVoiceTemplate :: s
 }
 
 makeFields ''FullSynth
 
 -- Source == Steppable Seconds Pulse
-instance Source s => Steppable Seconds Pulse (FullSynth s) where
+instance (Source s, IsVoice s) => Steppable Seconds Pulse (FullSynth s) where
   step dt  = do
     -- step the [Voice]
     -- pulse <- overState voices $ stepVoices dt
-    pulse <- stepVoices dt .@ voices
+    -- pulse <- stepVoices dt .@ voices
+    pulses :: [Pulse] <- step dt .@ voices
+    let pulse = sum pulses
+    cullFinished .@ voices
 
     -- run the LFO
     moduland <- step dt .@ lfo
@@ -76,12 +82,12 @@ instance Source s => Steppable Seconds Pulse (FullSynth s) where
 
 
 -- Kill any remaining notes, wait for them to ring out
-runFullSynthANiente :: Source s => Seconds -> State (FullSynth s) [Pulse]
+runFullSynthANiente :: (Source s, IsVoice s) => Seconds -> State (FullSynth s) [Pulse]
 runFullSynthANiente dt = do
   noteOffAllFullSynth
   iterateStateUntil (uses voices null) (step dt)
 
-runFullSynthSteps :: Source s => Int -> Seconds -> State (FullSynth s) [Pulse]
+runFullSynthSteps :: (Source s, IsVoice s) => Int -> Seconds -> State (FullSynth s) [Pulse]
 -- runFullSynthSteps 0 dt = return []
 -- runFullSynthSteps n dt = do
 --   pulse <- stepFullSynth dt
@@ -94,7 +100,7 @@ runFullSynthSteps n dt = iterateState n (step dt)
 --    as they're only culled once per call to runSynthSteps
 --    and leaving them in the EnvDone state will waste time calculating zeros
 -- #TODO could the EnvDone state be signalled somehow to automate the culling?
-runFullSynth :: Source s => Seconds -> State (FullSynth s) [Pulse]
+runFullSynth :: (Source s, IsVoice s) => Seconds -> State (FullSynth s) [Pulse]
 runFullSynth dt | dt < (1.0/sampleRate) = return []
                 | dt > 1.0 = do 
                     firstSec <- runFullSynthSteps (floor sampleRate) (1.0/sampleRate)
@@ -105,23 +111,25 @@ runFullSynth dt | dt < (1.0/sampleRate) = return []
 
 
 
-noteOnFullSynth :: (Source s, FreqField s) => 
+noteOnFullSynth :: (Source s, FreqField s, IsVoice s) => 
                     NoteNumber -> State (FullSynth s) ()
 noteOnFullSynth note = do
   newVoice <- use voiceTemplate
-  noteOnVoicesWith (initialiseVoice newVoice) note .@ voices
+  -- noteOnVoicesWith (initialiseVoice newVoice) note .@ voices
+  noteOn note newVoice .@ voices
+  -- noteOnVoicesWith (initialiseVoice newVoice) note .@ voices
 
-noteOffFullSynth :: NoteNumber -> State (FullSynth s) ()
-noteOffFullSynth note = noteOffVoices note .@ voices
+noteOffFullSynth :: IsVoice s => NoteNumber -> State (FullSynth s) ()
+noteOffFullSynth note = noteOff note .@ voices
 
-noteOffAllFullSynth :: State (FullSynth s) ()
-noteOffAllFullSynth = voices.each %= releaseVoice
+noteOffAllFullSynth :: IsVoice s => State (FullSynth s) ()
+noteOffAllFullSynth = voices.each %= release
 
 
 -- ================================================================================
 
 
-synthesiseMidiTrack :: (Source s, FreqField s) => 
+synthesiseMidiTrack :: (Source s, FreqField s, IsVoice s) => 
                       Track Ticks -> State (FullSynth s) [Pulse]
 synthesiseMidiTrack [] = runFullSynthANiente (1/sampleRate)
 synthesiseMidiTrack ((ticks, message):messages) = do
@@ -137,7 +145,7 @@ synthesiseMidiTrack ((ticks, message):messages) = do
 
 
 
-defaultSynth :: FullSynth SimpleOsc
+defaultSynth :: FullSynth (Voice SimpleOsc (Filter FreqParam))
 defaultSynth = FullSynth {
   _fullSynthVoices = ([]), 
   -- _fullSynthFilt = bandPass (1/sampleRate) & param .~ (220, 880),--param is (low, high)

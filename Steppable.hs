@@ -22,13 +22,13 @@ import Helpers
 
 
 -- `s` can be stepped, taking an `a` input, and producing a `b`
-class Steppable a b s where
-  step :: a -> State s b
+class Steppable i o s where
+  step :: i -> State s o
 
 type Source s = Steppable Seconds Pulse s
 type Transformer s = Steppable Pulse Pulse s
 
-instance Steppable a b s => Steppable a [b] [s] where
+instance Steppable i o s => Steppable i [o] [s] where
   -- step :: Seconds -> State 
   step inp = stateMap $ step inp
 

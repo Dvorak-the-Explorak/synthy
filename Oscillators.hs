@@ -10,12 +10,16 @@
 
 module Oscillators where
 
--- An Oscillator has a stateful action that produces `Pulse`s.  
---  it has hidden internal state (usually phase of a waveform), 
---  as well as exposed parameters.  
-
--- An Oscillator can be a primitive wave (sine, square, saw,...)
---  or something loaded from a WAVE file (wavetable, sample)
+{- 
+Oscillator is no longer a distinct type, they are represented through Kernel types
+Oscillators are basic sound sources, which can be statefully stepped to produce a pulse 
+    (ie. they are instances of Steppable Second Pulse)
+  and can expose parameters through lenses (see module Parameterised.hs)
+An Oscillator could be:
+  a primitive wave (sine, square, saw,...)
+  a waveform loaded from a file
+  a wavetable loaded from a file
+-}
 
 
 import Control.Monad.State
@@ -61,6 +65,9 @@ instance WaveIndexField WavetableOscStore where
       set (WavetableOscStore s) x = WavetableOscStore x
 
 
+-- ======================================================================
+
+
 updatePhase dt freq_ phase_ = (`mod'` 1.0) $ phase_ + dt*freq_
  
 
@@ -71,13 +78,6 @@ simpleOscReader wf = \dt -> do
   put $ SimpleOscStore (_phase', _freq)
   return $ wf _phase'
 
--- -- Wavetable :: (WaveIndex -> Phase -> Pulse)
--- wavetableReader :: Wavetable -> OscReader Phase WavetableParam
--- wavetableReader f  = 
---   \(WavetableParam (waveIndex_,freq_)) dt -> 
---     modify (updatePhase dt freq_) >> gets (f waveIndex_)
-
--- Wavetable :: (WaveIndex -> Phase -> Pulse)
 wavetableReader :: Wavetable -> (Seconds -> State WavetableOscStore Pulse)
 wavetableReader f = \dt -> do
   WavetableOscStore (_phase, _waveIndex, _freq) <- get
@@ -140,12 +140,6 @@ wavetableOsc table =  Kernel
   , _doStep = wavetableReader table
   }
 
--- whiteNoiseOsc :: RandomGen g => g -> Oscillator ()
--- whiteNoiseOsc g = Oscillator
---   { _getSample = randomOscReader
---   , _oscStorage = g
---   , _oscParams = ()
---   }
 
 whiteNoiseOsc :: RandomGen g => g -> Kernel g Seconds Pulse
 whiteNoiseOsc g = Kernel
@@ -154,18 +148,6 @@ whiteNoiseOsc g = Kernel
   }
 
 -- =============================================================
-
-
--- Mix 2 oscillators together 50/50
--- ignores second oscillator's parameter
--- mix :: Oscillator a -> Oscillator a -> Oscillator a
--- mix (Oscillator get1 store1 p1) (Oscillator get2 store2 _) = 
---   (Oscillator getSample (store1,store2) p1)
---     where 
---       getSample param dt = do
---         out1 <- get1 param dt .@ _1
---         out2 <- get2 param dt .@ _2
---         return (0.5*out1 + 0.5*out2)
 
 
 -- Mix 2 oscillators together 50/50
