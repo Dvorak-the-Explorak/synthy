@@ -30,6 +30,9 @@ data Filter a = forall s. Filter {
   _filterRun :: FilterFunc s a
 }
 
+
+
+
 -- the only thing that's allowed to touch the filter storage type
 --  takes its parameter type and the input pulse,
 --  returns statefult effect that updates the filterStorage and returns output pulse

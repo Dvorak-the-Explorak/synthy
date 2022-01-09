@@ -32,8 +32,7 @@ import Parameterised
 
 import Debug.Trace
 
--- pure waveform, can evaluate its pulse from just phase
-type Waveform = Phase -> Pulse
+
 
 
 newtype SimpleOscStore = SimpleOscStore (Phase, Hz)

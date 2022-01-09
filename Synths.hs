@@ -4,6 +4,7 @@
            , TypeSynonymInstances
            , FlexibleInstances
            , FlexibleContexts
+           , ScopedTypeVariables
   #-}
 
 module Synths where
@@ -43,7 +44,8 @@ data FullSynth s = FullSynth {
 
 makeFields ''FullSynth
 
-instance Steppable Seconds Pulse s => Steppable Seconds Pulse (FullSynth s) where
+-- Source == Steppable Seconds Pulse
+instance Source s => Steppable Seconds Pulse (FullSynth s) where
   step dt  = do
     -- step the [Voice]
     -- pulse <- overState voices $ stepVoices dt
@@ -74,12 +76,12 @@ instance Steppable Seconds Pulse s => Steppable Seconds Pulse (FullSynth s) wher
 
 
 -- Kill any remaining notes, wait for them to ring out
-runFullSynthANiente :: Steppable Seconds Pulse s => Seconds -> State (FullSynth s) [Pulse]
+runFullSynthANiente :: Source s => Seconds -> State (FullSynth s) [Pulse]
 runFullSynthANiente dt = do
   noteOffAllFullSynth
   iterateStateUntil (uses voices null) (step dt)
 
-runFullSynthSteps :: Steppable Seconds Pulse s => Int -> Seconds -> State (FullSynth s) [Pulse]
+runFullSynthSteps :: Source s => Int -> Seconds -> State (FullSynth s) [Pulse]
 -- runFullSynthSteps 0 dt = return []
 -- runFullSynthSteps n dt = do
 --   pulse <- stepFullSynth dt
@@ -92,7 +94,7 @@ runFullSynthSteps n dt = iterateState n (step dt)
 --    as they're only culled once per call to runSynthSteps
 --    and leaving them in the EnvDone state will waste time calculating zeros
 -- #TODO could the EnvDone state be signalled somehow to automate the culling?
-runFullSynth :: Steppable Seconds Pulse s => Seconds -> State (FullSynth s) [Pulse]
+runFullSynth :: Source s => Seconds -> State (FullSynth s) [Pulse]
 runFullSynth dt | dt < (1.0/sampleRate) = return []
                 | dt > 1.0 = do 
                     firstSec <- runFullSynthSteps (floor sampleRate) (1.0/sampleRate)
@@ -103,7 +105,7 @@ runFullSynth dt | dt < (1.0/sampleRate) = return []
 
 
 
-noteOnFullSynth :: (Steppable Seconds Pulse s, FreqField s) => 
+noteOnFullSynth :: (Source s, FreqField s) => 
                     NoteNumber -> State (FullSynth s) ()
 noteOnFullSynth note = do
   newVoice <- use voiceTemplate
@@ -119,7 +121,7 @@ noteOffAllFullSynth = voices.each %= releaseVoice
 -- ================================================================================
 
 
-synthesiseMidiTrack :: (Steppable Seconds Pulse s, FreqField s) => 
+synthesiseMidiTrack :: (Source s, FreqField s) => 
                       Track Ticks -> State (FullSynth s) [Pulse]
 synthesiseMidiTrack [] = runFullSynthANiente (1/sampleRate)
 synthesiseMidiTrack ((ticks, message):messages) = do

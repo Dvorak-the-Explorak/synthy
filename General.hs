@@ -6,14 +6,13 @@ type SamplesPerSecond = Float
 type Hz = Float
 type Phase = Float
 type Pulse = Float
+type Waveform = Phase -> Pulse -- pure waveform, can evaluate its pulse from just phase
 type WaveIndex = Float
 type ScaleDegree = Int
 type Beats = Float
 type DutyCycle = Float
 type Velocity = Float
 type Scale = ScaleDegree -> Hz
--- Kinda don't like that the envelope acts on samples
--- type Envelope = Velocity -> Seconds -> [Pulse] -> [Pulse]
 type Sequence = [([ScaleDegree], Seconds)]
 
 addSounds :: [Pulse] -> [Pulse] -> [Pulse]

@@ -64,8 +64,9 @@ data Voice s f = Voice {
 makeFields ''Voice
 
 
-instance (Steppable Seconds Pulse s, Steppable Pulse Pulse b) 
-        => Steppable Seconds Pulse (Voice s b) where
+-- Source == Steppable Seconds Pulse
+instance (Source s, Transformer f) 
+        => Steppable Seconds Pulse (Voice s f) where
   step dt =  do
     -- run the filter envelope and update the filter frequency
     stepFilterEnv dt
@@ -80,7 +81,7 @@ instance (Steppable Seconds Pulse s, Steppable Pulse Pulse b)
     return $ output
 
   -- run the filter envelope and update the filter frequency
-stepFilterEnv :: Seconds -> State (Voice s b) ()
+stepFilterEnv :: Seconds -> State (Voice s f) ()
 stepFilterEnv dt = do
   filterFreqOffset <- step dt .@ filtEnv
   f <- use filtModulate
@@ -95,22 +96,22 @@ instance WaveIndexField s => WaveIndexField (Voice s f) where
 
 -- =======================================================================
 
-initialiseVoice :: FreqField s => Voice s b -> NoteNumber -> Voice s b
+initialiseVoice :: FreqField s => Voice s f -> NoteNumber -> Voice s f
 initialiseVoice v noteNum = v & source . freq .~ hzFromNoteNumber noteNum
                               & note .~ noteNum
 
 
-voiceFinished :: Voice s b -> Bool
+voiceFinished :: Voice s f -> Bool
 voiceFinished v = (v ^. venv . currentState) == EnvDone
 
 -- #TODO since voice has a NoteNumber, should this take note number and do nothing if they don't match?
-releaseVoice :: Voice s b -> Voice s b
+releaseVoice :: Voice s f -> Voice s f
 releaseVoice = (venv %~ noteOffEnv) . (filtEnv %~ noteOffEnv)
 
-restartVoice :: Voice s b -> Voice s b
+restartVoice :: Voice s f -> Voice s f
 restartVoice = (venv %~ restartEnv) . (filtEnv %~ restartEnv)
 
-maybeRestartVoice :: NoteNumber -> Voice s b -> Maybe (Voice s b)
+maybeRestartVoice :: NoteNumber -> Voice s f -> Maybe (Voice s f)
 maybeRestartVoice noteNum v = 
   if (v ^. note) == noteNum
     then Just $ restartVoice v
@@ -118,7 +119,7 @@ maybeRestartVoice noteNum v =
 
 
 
-onMatchingVoice :: NoteNumber -> (Voice s b -> Voice s b) -> Voice s b -> Voice s b
+onMatchingVoice :: NoteNumber -> (Voice s f -> Voice s f) -> Voice s f -> Voice s f
 onMatchingVoice noteNum f v = 
   if (v ^. note) == noteNum
     then f v
@@ -126,37 +127,37 @@ onMatchingVoice noteNum f v =
 
 
 
-restartMatchingVoice :: NoteNumber -> Voice s b -> Voice s b
+restartMatchingVoice :: NoteNumber -> Voice s f -> Voice s f
 restartMatchingVoice note = onMatchingVoice note restartVoice
 
-releaseMatchingVoice :: NoteNumber -> Voice s b -> Voice s b
+releaseMatchingVoice :: NoteNumber -> Voice s f -> Voice s f
 releaseMatchingVoice note = onMatchingVoice note releaseVoice
 
 
 -- ==================================================================================
 
-stepVoices :: (Steppable Seconds Pulse s, Steppable Pulse Pulse b) 
-        => Seconds -> State [Voice s b] Pulse
+stepVoices :: (Source s, Transformer f) 
+        => Seconds -> State [Voice s f] Pulse
 stepVoices dt = do
   output <- fmap sum $ stateMap $ step dt
   cullVoices
   return output
 
-cullVoices :: State [Voice s b] ()
+cullVoices :: State [Voice s f] ()
 cullVoices = modify (filter running)
   where running = not . voiceFinished
 
 -- send any voice with given noteNumber back to the start of its envelope
-restartVoices :: NoteNumber -> [Voice s b] -> [Voice s b]
+restartVoices :: NoteNumber -> [Voice s f] -> [Voice s f]
 restartVoices noteNum voices = map (restartMatchingVoice noteNum) voices
 
 -- noteOff any voice with given noteNumber (send them to the release part of envelope)
-releaseVoices :: NoteNumber -> [Voice s b] -> [Voice s b]
+releaseVoices :: NoteNumber -> [Voice s f] -> [Voice s f]
 releaseVoices noteNum voices = map (releaseMatchingVoice noteNum) voices
 
 -- Traverse the list of voices with a maybeRestartVoice function, 
 --   if the result is Nothing, create a new one
-noteOnVoicesWith :: (NoteNumber -> Voice s b) ->  NoteNumber -> State [Voice s b] ()
+noteOnVoicesWith :: (NoteNumber -> Voice s f) ->  NoteNumber -> State [Voice s f] ()
 noteOnVoicesWith makeVoice noteNum = modify $ \voices -> 
   let 
     go [] = [makeVoice noteNum]
@@ -166,7 +167,7 @@ noteOnVoicesWith makeVoice noteNum = modify $ \voices ->
   in go voices
 
 -- set the envelope of any voices with the corrseponding note to EnvRelease state
-noteOffVoices :: NoteNumber -> State [Voice s b] ()
+noteOffVoices :: NoteNumber -> State [Voice s f] ()
 noteOffVoices noteNum = modify $ releaseVoices noteNum 
 
 
