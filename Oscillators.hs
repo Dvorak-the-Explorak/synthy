@@ -48,22 +48,34 @@ data Oscillator a = forall s . Oscillator {
 } 
 
 
-type SimpleOscillatorOld = Oscillator (FreqParam)
-
-newtype SimpleOscStore = SimpleOscStore { unSimpleOscStore :: (Phase, Hz) }
-
-type SimpleOsc = (Kernel SimpleOscStore Seconds Pulse)
-
-
 -- makes the lenses, calls the lens for _getSample just getSample
 makeLenses ''Oscillator
 
-instance FreqField SimpleOscStore where
-  freq = lens get set
-    where
-      get (SimpleOscStore s) = snd s 
-      set (SimpleOscStore (p,_)) x = SimpleOscStore (p,x)
 
+newtype SimpleOscStore = SimpleOscStore (Phase, Hz)
+type SimpleOsc = (Kernel SimpleOscStore Seconds Pulse)
+
+instance FreqField SimpleOscStore where
+  freq = (lens get set) . _2
+    where
+      get (SimpleOscStore s) = s 
+      set _ x = SimpleOscStore x
+
+
+newtype WavetableOscStore = WavetableOscStore (Phase, WaveIndex, Hz)
+type WavetableOsc = Kernel WavetableOscStore Seconds Pulse
+
+instance FreqField WavetableOscStore where
+  freq = (lens get set) . _3
+    where
+      get (WavetableOscStore s) = s 
+      set _ x = WavetableOscStore x
+
+instance WaveIndexField WavetableOscStore where
+  waveIndex = (lens get set) . _2
+    where
+      get (WavetableOscStore s) = s
+      set (WavetableOscStore s) x = WavetableOscStore x
 
 -- ==========================================
 
@@ -72,6 +84,8 @@ instance Steppable Seconds Pulse (Oscillator a) where
   step dt = state $ \(Oscillator getSample s param) -> let
       (output, s') = runState (getSample param dt) s 
     in (output, Oscillator getSample s' param)
+
+
 
 
 -- if the oscillator's parameter exposes a waveIndex,
@@ -88,13 +102,7 @@ instance FreqField p => FreqField (Oscillator p)where
 
 
 updatePhase dt freq_ phase_ = (`mod'` 1.0) $ phase_ + dt*freq_
-
--- stores the phase, freq as param
--- Waveform :: Phase -> Pulse
-simpleOscReaderOld :: Waveform -> OscReader Phase FreqParam
-simpleOscReaderOld f = 
-  \(FreqParam freq_) dt -> 
-    modify (updatePhase dt freq_) >> gets f 
+ 
 
 simpleOscReader :: Waveform -> (Seconds -> State SimpleOscStore Pulse)
 simpleOscReader wf = \dt -> do
@@ -103,15 +111,23 @@ simpleOscReader wf = \dt -> do
   put $ SimpleOscStore (_phase', _freq)
   return $ wf _phase'
 
+-- -- Wavetable :: (WaveIndex -> Phase -> Pulse)
+-- wavetableReader :: Wavetable -> OscReader Phase WavetableParam
+-- wavetableReader f  = 
+--   \(WavetableParam (waveIndex_,freq_)) dt -> 
+--     modify (updatePhase dt freq_) >> gets (f waveIndex_)
+
 -- Wavetable :: (WaveIndex -> Phase -> Pulse)
-wavetableReader :: Wavetable -> OscReader Phase WavetableParam
-wavetableReader f  = 
-  \(WavetableParam (waveIndex_,freq_)) dt -> 
-    modify (updatePhase dt freq_) >> gets (f waveIndex_)
+wavetableReader :: Wavetable -> (Seconds -> State WavetableOscStore Pulse)
+wavetableReader f = \dt -> do
+  WavetableOscStore (_phase, _waveIndex, _freq) <- get
+  let _phase' = updatePhase dt _freq _phase
+  put $ WavetableOscStore (_phase', _waveIndex, _freq)
+  return $ f _waveIndex _phase
 
 
-randomOscReader :: RandomGen g => OscReader g ()
-randomOscReader = \ _ dt -> state $ uniformR (0.0, 1.0)
+randomOscReader :: RandomGen g => (Seconds -> State g Pulse)
+randomOscReader = \dt -> state $ uniformR (0.0, 1.0)
   
 
 
@@ -130,9 +146,6 @@ squareTone = (\t -> if (t `mod'` 1.0 < 0.5) then -1.0 else 1.0)
 
 -- ============================================================
 
--- -- they're the same type
--- wavetableReader :: Wavetable -> OscReader
--- wavetableReader = id        
 
 waveformFromSamples :: [Float] -> Waveform
 waveformFromSamples vals = \x -> let
@@ -150,12 +163,6 @@ zeroOsc = simpleOsc (const 0)
 lfo1s :: SimpleOsc
 lfo1s = simpleOsc pureTone & freq .~ 1
 
-simpleOscOld :: Waveform -> SimpleOscillatorOld
-simpleOscOld wf =  Oscillator 
-  { _getSample = simpleOscReaderOld wf
-  , _oscStorage = 0 -- phase
-  , _oscParams = FreqParam 0
-  }
 
 simpleOsc :: Waveform -> SimpleOsc
 simpleOsc wf = Kernel 
@@ -166,18 +173,24 @@ sawOsc = simpleOsc sawTone
 squareOsc = simpleOsc squareTone
 sineOsc = simpleOsc pureTone
 
-wavetableOsc :: Wavetable -> Oscillator WavetableParam
-wavetableOsc table =  Oscillator 
-  { _getSample = wavetableReader table
-  , _oscStorage = 0 -- phase
-  , _oscParams = WavetableParam (0, 0)
+
+wavetableOsc :: Wavetable -> WavetableOsc
+wavetableOsc table =  Kernel
+  { _storage = WavetableOscStore (0, 0, 0)
+  , _doStep = wavetableReader table
   }
 
-whiteNoiseOsc :: RandomGen g => g -> Oscillator ()
-whiteNoiseOsc g = Oscillator
-  { _getSample = randomOscReader
-  , _oscStorage = g
-  , _oscParams = ()
+-- whiteNoiseOsc :: RandomGen g => g -> Oscillator ()
+-- whiteNoiseOsc g = Oscillator
+--   { _getSample = randomOscReader
+--   , _oscStorage = g
+--   , _oscParams = ()
+--   }
+
+whiteNoiseOsc :: RandomGen g => g -> Kernel g Seconds Pulse
+whiteNoiseOsc g = Kernel
+  { _storage = g
+  , _doStep = randomOscReader
   }
 
 -- =============================================================
@@ -195,16 +208,6 @@ mix (Oscillator get1 store1 p1) (Oscillator get2 store2 _) =
         return (0.5*out1 + 0.5*out2)
 
 
-
--- noisy :: RandomGen g => g -> Volume -> Oscillator a -> Oscillator a
--- noisy g noiseMix (Oscillator getSample store param) = (Oscillator getSample' store' param)
---   where
---     store' = (store, g)
---     getSample' param dt = do
---       output <- getSample param dt .@ _1
---       noise <- randomOscReader () dt .@ _2
---       return ((1-noiseMix)*output + noiseMix*noise)
-
 noisy :: RandomGen g => g -> Volume -> Kernel s Seconds Pulse -> Kernel (s, g) Seconds Pulse
 noisy g noiseMix (Kernel _storage _doStep) = (Kernel _storage' _doStep')
   where
@@ -212,7 +215,7 @@ noisy g noiseMix (Kernel _storage _doStep) = (Kernel _storage' _doStep')
 
     _doStep' dt = do
       output <- _doStep dt .@ _1
-      noise <- randomOscReader () dt .@ _2
+      noise <- randomOscReader dt .@ _2
       return ((1-noiseMix)*output + noiseMix*noise)
 
 
