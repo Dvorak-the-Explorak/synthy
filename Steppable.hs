@@ -33,8 +33,8 @@ type Transformer s = Steppable Pulse Pulse s
 
 
 data Kernel s i o = Kernel 
-  { _storage :: s
-  , _doStep :: i -> State s o}
+  { _kernelStorage :: s
+  , _kernelDoStep :: i -> State s o}
 
 seqKernels :: Kernel s1 i1 int -> Kernel s2 int o2 -> Kernel (s1,s2) i1 o2
 seqKernels (Kernel s1 go1) (Kernel s2 go2) = (Kernel s go)
@@ -48,8 +48,8 @@ seqKernels (Kernel s1 go1) (Kernel s2 go2) = (Kernel s go)
     --   go2 int .@ _2
 
 
--- makes the lenses, calls the lens for _storage just storage
-makeLenses ''Kernel
+-- makes the lenses, calls the lens for _kernelStorage just storage
+makeFields ''Kernel
 
 
 -- this lifts the action on the Kernel's storage into an action on the Kernel,

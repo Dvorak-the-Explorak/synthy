@@ -1,7 +1,9 @@
 {-# LANGUAGE DeriveGeneric
            , FlexibleContexts    
            , FlexibleInstances
-           , MultiParamTypeClasses             
+           , MultiParamTypeClasses   
+           , TemplateHaskell          
+           , FunctionalDependencies
 #-}
 
 module Parameterised where
@@ -23,6 +25,10 @@ newtype WavetableParam = WavetableParam (WaveIndex, Hz)
   deriving Generic
 instance Wrapped WavetableParam
 
+
+-- for types that have hidden storage (which doesn't expose a parameter),
+--  as well as a type that does expose parameters
+-- #TODO need a better name than "ParamSecond"
 newtype ParamSecond a b = ParamSecond (a, b) 
   deriving Generic
 instance Wrapped (ParamSecond a b)
@@ -32,9 +38,14 @@ instance Field1 (ParamSecond a b) (ParamSecond a b) a a where
 instance Field2 (ParamSecond a b) (ParamSecond a b) b b where
   _2 = _Wrapped' . _2
 
+data WithStorage s a = WithStorage
+  { _withStorageStorage :: s
+  , _withStorageParam :: a
+  }
 
 
-
+-- calls the lens for `_withStorageStorage` just "storage"
+makeFields ''WithStorage
 
 
 class FreqField s where
@@ -48,6 +59,10 @@ instance FreqField WavetableParam where
 
 instance FreqField b => FreqField (ParamSecond a b) where
   freq = _2 . freq
+
+instance FreqField a => FreqField (WithStorage s a) where
+  freq = param . freq
+
 
 
 
@@ -64,9 +79,14 @@ class WaveIndexField s where
 instance WaveIndexField WavetableParam where
   waveIndex = _Wrapped' . _1
 
-instance WaveIndexField s => WaveIndexField (Kernel s i o) where
-  waveIndex =  storage . waveIndex
 
 
 instance WaveIndexField b => WaveIndexField (ParamSecond a b) where
   waveIndex = _2 . waveIndex
+
+instance WaveIndexField a => WaveIndexField (WithStorage s a) where
+  waveIndex = param . waveIndex
+
+
+instance WaveIndexField s => WaveIndexField (Kernel s i o) where
+  waveIndex =  storage . waveIndex

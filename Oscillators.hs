@@ -136,10 +136,10 @@ waveformFromSamples vals = \x -> let
   in (vals !! i) + frac * ((vals !! next) - (vals !! i))
 
 makeOneshot :: [Pulse] -> Seconds -> OneshotOsc
-makeOneshot pulses sampleRate = Kernel 
-  { _storage = OneshotOscStore (pulses, sampleRate, 0)
-  , _doStep = stepOneshotOsc
-  }
+makeOneshot pulses sampleRate = Kernel s go
+  where
+    s = OneshotOscStore (pulses, sampleRate, 0)
+    go = stepOneshotOsc
 
 -- ==========================================================
 
@@ -151,9 +151,10 @@ lfo1s = simpleOsc pureTone & freq .~ 1
 
 
 simpleOsc :: Waveform -> SimpleOsc
-simpleOsc wf = Kernel 
-  { _storage = SimpleOscStore (0,0)
-  , _doStep = stepSimpleOsc wf }
+simpleOsc wf = Kernel s go
+  where
+    s = SimpleOscStore (0,0)
+    go = stepSimpleOsc wf
 
 sawOsc = simpleOsc sawTone
 squareOsc = simpleOsc squareTone
@@ -161,17 +162,18 @@ sineOsc = simpleOsc pureTone
 
 
 wavetableOsc :: Wavetable -> WavetableOsc
-wavetableOsc table =  Kernel
-  { _storage = WavetableOscStore (0, 0, 0)
-  , _doStep = stepWavetableOsc table
-  }
+wavetableOsc table =  Kernel s go
+  where
+    s = WavetableOscStore (0, 0, 0)
+    go = stepWavetableOsc table
 
 
 whiteNoiseOsc :: RandomGen g => g -> Kernel g Seconds Pulse
-whiteNoiseOsc g = Kernel
-  { _storage = g
-  , _doStep = stepRandomOsc
-  }
+whiteNoiseOsc g = Kernel s go
+  where
+    s = g
+    go = stepRandomOsc
+  
 
 -- =============================================================
 
