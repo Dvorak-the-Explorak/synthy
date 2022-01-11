@@ -79,7 +79,7 @@ instance (Source s, Transformer f)
     stepFilterEnv dt
 
     -- run the oscillator and the volume envelope
-    pulse :: Pulse <-  step dt .@ source
+    pulse <-  step dt .@ source
     vol <- step dt .@ venv
 
     -- run the filter

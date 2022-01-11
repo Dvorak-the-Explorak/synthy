@@ -94,7 +94,7 @@ injectState op = state $ unzip . fmap (runState op)
 injectWith :: Functor f => (f a -> a) -> State s a -> State (f s) a
 injectWith combine op = state $ first combine . unzip . fmap (runState op)
 
-
+-- iterate the stateful operation until the condition on the state holds
 iterateStateUntil :: State s Bool -> State s a -> State s [a]
 iterateStateUntil cond op = do
   done <- cond
@@ -105,6 +105,7 @@ iterateStateUntil cond op = do
       xs <- iterateStateUntil cond op
       return $ x:xs
 
+-- iterate a state a given number of times
 iterateState :: Int -> State s a -> State s [a]
 iterateState 0 _ = return []
 iterateState n op = do
@@ -115,14 +116,24 @@ iterateState n op = do
 
 -- ==================================
 
+-- (stateful .~)  statefully update a lens focus to a given value
 -- (.=) :: Lens' s a -> a -> State s ()
+
+-- (stateful %~)  statefully update a lens focus by a function
 -- (%=) :: Lens' s a -> (a -> a) -> State s ()
 
+-- apply a function to a value and overwrite a given value with the result (all 3 are lenses)
 -- (.*=) :: Lens' s (a -> b) -> Lens' s a -> Lens' s b -> State s ()
 -- (.*=) fl xl tl = do
 --   f <- use fl
 --   x <- use xl
 --   tl .= f x
+
+-- use fl :: f (a->b)
+-- use xl :: f a
+-- (use fl) <*> (use xl) :: f b
+-- tl .= (use fl <*> use xl) :: f ()
+
 
 
 -- mapLens :: Lens' s a -> Lens' [s] [a]

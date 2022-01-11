@@ -59,7 +59,7 @@ instance (Source s, IsVoice s) => Steppable Seconds Pulse (FullSynth s) where
     pulses <- stateMap (step dt) .@ voices
     let pulse = Map.foldl' (+) 0 pulses
 
-    modify (Map.filter (not . finished)) .@ voices
+    voices %= Map.filter (not . finished)
 
     -- run the LFO
     moduland <- step dt .@ lfo
@@ -119,10 +119,10 @@ noteOnFullSynth :: (Source s, FreqField s, IsVoice s) =>
                     NoteNumber -> State (FullSynth s) ()
 noteOnFullSynth note = do
   newVoice <- initialise note <$> use voiceTemplate
-  modify (Map.insertWith (flip const) note newVoice) .@ voices
+  voices %= Map.insertWith (flip const) note newVoice
 
 noteOffFullSynth :: IsVoice s => NoteNumber -> State (FullSynth s) ()
-noteOffFullSynth note = modify (Map.adjust release note) .@ voices
+noteOffFullSynth note = voices %= Map.adjust release note
 
 noteOffAllFullSynth :: IsVoice s => State (FullSynth s) ()
 noteOffAllFullSynth = voices.each %= release
