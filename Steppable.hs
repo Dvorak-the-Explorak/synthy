@@ -29,16 +29,23 @@ class Steppable i o s | i s -> o where
 type Source s = Steppable Seconds Pulse s
 type Transformer s = Steppable Pulse Pulse s
 
--- instance Steppable i o s => Steppable i [o] [s] where
---   -- step :: Seconds -> State 
---   step inp = stateMap $ step inp
-
 
 
 
 data Kernel s i o = Kernel 
   { _storage :: s
   , _doStep :: i -> State s o}
+
+seqKernels :: Kernel s1 i1 int -> Kernel s2 int o2 -> Kernel (s1,s2) i1 o2
+seqKernels (Kernel s1 go1) (Kernel s2 go2) = (Kernel s go)
+  where
+    s = (s1,s2)
+
+    go i1 = (go1 i1 .@ _1) >>= (.@ _2) . go2
+
+    -- go i1 = do
+    --   int <- go1 i1 .@ _1
+    --   go2 int .@ _2
 
 
 -- makes the lenses, calls the lens for _storage just storage

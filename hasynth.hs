@@ -43,7 +43,7 @@ import Debug.Trace
 --    TempoChange and TimeDiv to get the speed of songs right
 --    ProgramChange to get different instruments?
 --    Velocity in NoteOn and NoteOff
--- #TODO percussion sounds - white noise as a state thing - add type argument to Oscillator?
+-- #TODO percussion sounds - from noise oscillators
 -- #TODO voices with samples - load up a general midi soundfont and use that
 -- #TODO more filters:
 --    Reverb
@@ -51,9 +51,10 @@ import Debug.Trace
 --    highPass with resonance
 --    bandPass
 --    phaser
+-- #TODO filter from laplace transform or something
 
 
--- #TODO live stream mode, plug a midi control
+-- #TODO live stream mode, plug a midi controller
 
 -- ================================================================
 

@@ -11,7 +11,8 @@
 
 module Voices where
 
--- A voice is an enveloped sound source, with a NoteNumber attached.  
+-- A voice is an enveloped sound source.
+
 
 
 
@@ -34,9 +35,6 @@ import Debug.Trace
 
 {-   WANT:
 To be able to easily add filters / modulators to a voice
-
-A function:
-makeVoice :: Source s => s -> VolEnv -> 
 
 -}
 
@@ -107,7 +105,6 @@ instance WaveIndexField s => WaveIndexField (Voice s f) where
 initialiseVoice :: FreqField s => NoteNumber -> Voice s f -> Voice s f
 initialiseVoice noteNum v = v & source . freq .~ hzFromNoteNumber noteNum
 
-
 voiceFinished :: Voice s f -> Bool
 voiceFinished v = (v ^. venv . currentState) == EnvDone
 
@@ -122,19 +119,26 @@ restartVoice = (venv %~ restartEnv) . (filtEnv %~ restartEnv)
 
 
 
--- #TODO default voice could be better thought through
+
+makeVoice :: FreqField f => s -> f -> Voice s f
+makeVoice source filt = Voice 
+  { _voiceSource = source
+  , _voiceVenv = VolEnv
+    { _attackSlope=20, _decaySlope=2, _sustainLevel=0.7
+    , _releaseSlope=2, _currentState=EnvAttack, _volume=0
+    }
+  , _voiceFiltEnv = VolEnv
+    { _attackSlope=20, _decaySlope=8, _sustainLevel=0.01
+    , _releaseSlope=1, _currentState=EnvAttack, _volume=0
+    }
+  , _voiceFilt = filt
+  , _voiceFiltModulate = (\ v f -> f & freq .~ 800 + 16000*v)
+  }
+
+
+-- #TODO default voice could be better thought out
 -- #TODO make a function/functions to change the envelope of a voice
-defaultVoice :: s -> Voice s (Filter FreqParam)
-defaultVoice source = Voice {
-    _voiceSource = source,
-    _voiceVenv = VolEnv {
-        _attackSlope=20, _decaySlope=2, _sustainLevel=0.7, 
-        _releaseSlope=2, _currentState=EnvAttack, _volume=0
-    },
-    _voiceFiltEnv = VolEnv {
-        _attackSlope=20, _decaySlope=8, _sustainLevel=0.01, 
-        _releaseSlope=1, _currentState=EnvAttack, _volume=0
-    },
-    _voiceFilt = (lowPass (1/sampleRate)) & freq .~ 400,
-    _voiceFiltModulate = (\ v f -> f & freq .~ 800 + 16000*v)
-}
+defaultVoice = makeVoice source filt 
+  where
+    source = sawOsc
+    filt = (lowPass (1/sampleRate)) & freq .~ 400

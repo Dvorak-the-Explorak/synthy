@@ -157,7 +157,7 @@ defaultSynth = FullSynth {
   -- _fullSynthFilt = hashtagNoFilter (0,0),
   _fullSynthLfo = lfo1s & freq .~ 0.4,
   _fullSynthLfoStrength = 0.2, -- 400 * 10,
-  _fullSynthVoiceTemplate = defaultVoice sawOsc
+  _fullSynthVoiceTemplate = defaultVoice
 }
 
 

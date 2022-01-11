@@ -33,6 +33,8 @@ data Filter a = forall s. Filter {
 
 
 
+
+
 -- the only thing that's allowed to touch the filter storage type
 --  takes its parameter type and the input pulse,
 --  returns statefult effect that updates the filterStorage and returns output pulse
@@ -111,9 +113,22 @@ joinFilters secondInput getResult (Filter s1 p1 r1) (Filter s2 p2 r2) = let
       return $ getResult (out1,out2)
   in (Filter s p r)
 
+-- makes functionally identical representations while refactoring
+kernelToFilter :: Kernel (s, a) Pulse Pulse -> Filter a
+kernelToFilter (Kernel (store, param) go) = Filter store param run
+  where
+    -- go :: Pulse -> State (Pulse,Hz) Pulse
+    -- run :: Hz -> Pulse -> State Pulse Pulse
+    run param pulse = state $ \store -> let 
+        (out, (store', param')) = runState (go pulse) $ (store, param)
+        -- ignore the modification to param, it shouldn't change in step
+      in (out, store')
+-- can't undo k2f, because the storage type is hidden in Filter
 
 
--- ================================================================
+
+
+-- ===============================)=================================
 
 bandPass :: Seconds -> Filter (FreqParam,FreqParam)
 bandPass dt = highPass dt ~> lowPass dt
@@ -130,6 +145,12 @@ lowPass dt = Filter {
   _filterParam = FreqParam 0,
   _filterRun = lowPassFunc dt
 }
+
+-- lowPass2 :: Seconds -> Filter FreqParam
+-- lowPass2 dt = kernelToFilter $ Kernel s go
+--   where
+--     s = (0, FreqParam 0)
+
 
 highPass :: Seconds -> Filter FreqParam
 highPass dt = Filter {
@@ -155,8 +176,10 @@ combFilter = Filter {
 clipper :: Filter Volume
 clipper = Filter () (1) clipperFunc
 
+-- -- has no internal state, just applies a given function
 pureFilter :: (Pulse -> Pulse) -> Filter ()
 pureFilter f = Filter () () (const $ return . f)
+
 
 -- cubicFilter :: Filter ()
 -- cubicFilter = pureFilter (**3)
@@ -169,7 +192,8 @@ gainFilter = Filter () 1 (\gain -> return . (*gain))
 -- ================================
 
 hashtagNoFilterFunc :: FilterFunc () a
-hashtagNoFilterFunc _ = return 
+-- hashtagNoFilterFunc _ = return 
+hashtagNoFilterFunc = const return 
 
 lowPassFunc :: Seconds -> FilterFunc Pulse FreqParam
 lowPassFunc dt = (\(FreqParam cutoff) pulse -> state $ \prev -> 
@@ -179,6 +203,15 @@ lowPassFunc dt = (\(FreqParam cutoff) pulse -> state $ \prev ->
     next = alpha*pulse +  (1-alpha) * prev
   in (next, next)
   )
+
+--                         (----- Kernel go function -----) 
+lowPassFunc2 :: Seconds -> Pulse -> State (Pulse, Hz) Pulse
+lowPassFunc2 dt = \pulse -> state $ \(prev, cutoff) -> 
+  let 
+    rc = 1/(2*pi*cutoff)
+    alpha = dt / (rc + dt)
+    next = alpha*pulse +  (1-alpha) * prev
+  in (next, (next, cutoff))
 
 
 highPassFunc :: Seconds -> FilterFunc (Pulse,Pulse) FreqParam
