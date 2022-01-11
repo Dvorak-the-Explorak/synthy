@@ -29,6 +29,9 @@ data VolEnv = VolEnv {
 -- makes the lenses, calls the lens for _attackSlope just attackSlope
 makeLenses ''VolEnv
 
+
+-- #TODO Should this instance be Steppable (Seconds, Pulse) Pulse VolEnv?
+--        I don't think so, but it's an option.
 instance Steppable Seconds Volume VolEnv where
   step dt = do
     slope <- gets envSlope

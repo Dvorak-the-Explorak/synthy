@@ -33,14 +33,15 @@ import Helpers ((.@), iterateState, stateMap)
 import Debug.Trace
 
 {-   WANT:
-To be able to use different oscillators*, and use the parameters they expose,
-  while keeping the type-level safety (and without much overhead)
+To be able to easily add filters / modulators to a voice
 
-  
-* oscillators with different parameters (just freq, freq & waveIndex)
+A function:
+makeVoice :: Source s => s -> VolEnv -> 
 
 -}
 
+
+-- #TODO want `IsVoice v` to imply `Source v`
 class IsVoice v where
   restart :: v -> v
   release :: v -> v
@@ -55,6 +56,7 @@ data Voice s f = Voice {
   _voiceVenv :: VolEnv,
   _voiceFiltEnv :: VolEnv,
   _voiceFilt :: f,
+  -- How to change the filter according to the output of the filter envelope
   _voiceFiltModulate :: (Volume -> f -> f)
 }
 
@@ -101,6 +103,7 @@ instance WaveIndexField s => WaveIndexField (Voice s f) where
 
 -- =======================================================================
 
+
 initialiseVoice :: FreqField s => NoteNumber -> Voice s f -> Voice s f
 initialiseVoice noteNum v = v & source . freq .~ hzFromNoteNumber noteNum
 
@@ -120,6 +123,7 @@ restartVoice = (venv %~ restartEnv) . (filtEnv %~ restartEnv)
 
 
 -- #TODO default voice could be better thought through
+-- #TODO make a function/functions to change the envelope of a voice
 defaultVoice :: s -> Voice s (Filter FreqParam)
 defaultVoice source = Voice {
     _voiceSource = source,

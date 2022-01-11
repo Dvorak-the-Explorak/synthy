@@ -55,11 +55,11 @@ makeFields ''FullSynth
 instance (Source s, IsVoice s) => Steppable Seconds Pulse (FullSynth s) where
   step dt  = do
     -- if voices :: t v, then  pulses :: t Pulse
+    -- pulses :: Map NoteNumber v
     pulses <- stateMap (step dt) .@ voices
     let pulse = Map.foldl' (+) 0 pulses
 
     modify (Map.filter (not . finished)) .@ voices
-    -- cullFinished .@ voices
 
     -- run the LFO
     moduland <- step dt .@ lfo
