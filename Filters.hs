@@ -12,6 +12,8 @@ module Filters where
 -- A Filter is a stateful object which can modify sequences of pulses 
 --  it has internal state, and exposes parameters.  
 
+import GHC.Generics
+
 import Control.Monad.State
 import Control.Lens
 
@@ -64,8 +66,11 @@ mapFilterOutput f (Filter s p r) = let
     r' = \p' pulse -> fmap f (r p' pulse)
   in (Filter s p r')    
 
-(~>) :: Filter a -> Filter b -> Filter (a,b)
-(~>) = sequenceFiltersPacked id id
+-- (~>) :: Filter a -> Filter b -> Filter (a,b)
+-- (~>) = sequenceFiltersPacked id id
+
+(~>) :: Kernel s1 Pulse Pulse -> Kernel s2 Pulse Pulse -> Kernel (s1, s2) Pulse Pulse
+(~>) = seqKernels
 
 (+>) :: Filter a -> Filter b -> Filter (a,b)
 (+>) = parallelFilters (+)
@@ -108,10 +113,13 @@ joinFilters secondInput getResult (Filter s1 p1 r1) (Filter s2 p2 r2) = let
     s = (s1, s2)
     p = (p1, p2)
     r = \(p1', p2') pulse -> do
-      out1 <- overState _1 $ r1 p1' pulse
-      out2 <- overState _2 $ r2 p2' $ secondInput (pulse,out1)
+      out1 <- r1 p1' pulse .@ _1
+      out2 <- overStar2 p2' $ secondInput (pulse,out1)
       return $ getResult (out1,out2)
   in (Filter s p r)
+
+
+-- ========================================================================================
 
 -- makes functionally identical representations while refactoring
 kernelToFilter :: Kernel (WithStorage s a) Pulse Pulse -> Filter a
@@ -126,19 +134,54 @@ kernelToFilter (Kernel s@(WithStorage store param) go) = Filter store param run
       in (out, store')
 -- can't undo k2f, because the storage type is hidden in Filter
 
+-- ========================================================================================
+
+-- bandPass :: Seconds -> Filter (FreqParam,FreqParam)
+-- setting the frequency explicitly will squash the two frequencies together...
+bandPass dt = highPass2 dt ~> lowPass2 dt
 
 
+-- Store the frequencies (cutoffs), adjust for center and bandwidth for lenses
+-- how is this the longest thing in the codebase what
+data CBPStore a b = CBPStore a b
+center :: (FreqField a, FreqField b) => CBPStore a b -> Hz
+center (CBPStore a b) = (a ^. freq + b ^. freq) / 2
+band :: (FreqField a, FreqField b) => CBPStore a b -> Hz
+band (CBPStore a b) = (a ^. freq + b ^. freq) / 2
 
--- ===============================)=================================
+instance Field1 (CBPStore a b) (CBPStore a b) a a where
+  _1 = lens get set
+    where
+      get (CBPStore p1 _) = p1
+      set (CBPStore _ p2) x = CBPStore x p2
+instance Field2 (CBPStore a b) (CBPStore a b) b b where
+  _2 = lens get set
+    where
+      get (CBPStore _ p2) = p2
+      set (CBPStore p1 _) x = CBPStore p1 x
 
-bandPass :: Seconds -> Filter (FreqParam,FreqParam)
-bandPass dt = highPass dt ~> lowPass dt
+
+instance (FreqField a, FreqField b) => FreqField (CBPStore a b) where
+  freq = lens get set 
+    where
+      get s = center s
+      set s x = s & _1 . freq .~ (x - (band s)/2)
+                  & _2 . freq .~ (x + (band s)/2)
+instance (FreqField a, FreqField b) => BandwidthField (CBPStore a b)  where
+  bandwidth = lens get set
+    where
+      get s = band s
+      set s x = s & _1 . freq .~ (center s - x/2) 
+                  & _2 . freq .~ (center s + x/2)
 
 centeredBandPass :: Seconds -> Filter (FreqParam,FreqParam)
 centeredBandPass dt = let 
     packParam = \(FreqParam lo, FreqParam hi) -> (FreqParam $ (lo+hi)/2, FreqParam $ hi-lo)
     getParam = \(FreqParam center, FreqParam bandwidth) -> (FreqParam $ center-bandwidth, FreqParam $ center+bandwidth)
   in sequenceFiltersPacked packParam getParam (highPass dt) (lowPass dt)
+
+-- centeredBandPass2 :: Seconds -> Kernel (CBPStore blah blah) Pulse Pulse
+centeredBandPass2 dt = seqKernelsWith CBPStore (lowPass2 dt) (highPass2 dt)
 
 lowPass :: Seconds -> Filter FreqParam 
 lowPass = kernelToFilter . lowPass2
@@ -156,11 +199,18 @@ lowPass2 dt = Kernel s go
 
 
 highPass :: Seconds -> Filter FreqParam
-highPass dt = Filter {
-  _filterStorage = (0,0),
-  _filterParam = FreqParam 0,
-  _filterRun = highPassFunc dt
-}
+highPass = kernelToFilter . highPass2
+-- highPass dt = Filter {
+--   _filterStorage = (0,0),
+--   _filterParam = FreqParam 0,
+--   _filterRun = highPassFunc dt
+-- }
+
+highPass2 :: Seconds -> Kernel (WithStorage (Pulse,Pulse) FreqParam) Pulse Pulse
+highPass2 dt = Kernel s go
+  where
+    s = WithStorage (0,0) $ FreqParam 0
+    go = highPassFunc2 dt
 
 hashtagNoFilter :: a -> Filter a
 hashtagNoFilter param = Filter {
@@ -210,22 +260,15 @@ lowPassFunc dt = (\(FreqParam cutoff) pulse -> state $ \prev ->
   in (next, next)
   )
 
--- --                         (--------------- Kernel go function -------------) 
--- lowPassFunc2 :: Seconds -> Pulse -> State (ParamSecond Pulse FreqParam) Pulse
--- lowPassFunc2 dt = \pulse -> state $ \(ParamSecond (prev, FreqParam cutoff)) -> 
---   let 
---     rc = 1/(2*pi* cutoff)
---     alpha = dt / (rc + dt)
---     next = alpha*pulse +  (1-alpha) * prev
---   in (next, ParamSecond (next, FreqParam cutoff))
 
-  --                       (--------------- Kernel go function -------------) 
+
+--                         (--------------- Kernel go function -------------) 
 lowPassFunc2 :: Seconds -> Pulse -> State (WithStorage Pulse FreqParam) Pulse
 lowPassFunc2 dt = \pulse -> do
     WithStorage prev (FreqParam _freq) <- get
     let rc = rcFromCutoff _freq 
     let alpha = dt / (rc + dt)
-    storage %= (alpha * pulse +) . ((1-alpha) *)
+    storage .= alpha * pulse + (1-alpha) * prev
     use storage
 
 
@@ -238,6 +281,20 @@ highPassFunc dt = (\(FreqParam cutoff) pulse -> state $ \(prevOut, prevIn) ->
       next = alpha*pulse +  alpha * (prevOut - prevIn)
     in (next, (next, pulse) ) 
   )
+
+  --                        (--------------- Kernel go function -------------) 
+highPassFunc2 :: Seconds -> Pulse -> State (WithStorage (Pulse,Pulse) FreqParam) Pulse
+highPassFunc2 dt = \pulse -> do
+    WithStorage (prevOut, prevIn) (FreqParam _freq) <- get
+    let rc = rcFromCutoff _freq 
+    let alpha = rc / (rc + dt)
+
+    storage . _1 .= alpha * pulse + alpha * (prevOut - prevIn)
+    storage . _2 .= pulse
+
+    use $ storage . _1
+
+
 
 
 -- Should this take delay as a Seconds parameter instead of samples?
@@ -265,6 +322,8 @@ clipperFunc = \limit ->  return . (/limit) . hardClipLimit limit
 
 -- ===============================================
 
+
+-- Don't remember why I thought I'd need this
 mapFilter :: FilterFunc s p -> p -> [Pulse] -> State s [Pulse]
 mapFilter _filt param [] = return []
 mapFilter _filt param (pulse:pulses) = do
