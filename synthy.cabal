@@ -46,6 +46,7 @@ executable synthy
     binary,
     WAVE,
     vector,
-    random
+    random,
+    containers
   -- hs-source-dirs:
   default-language:    Haskell2010

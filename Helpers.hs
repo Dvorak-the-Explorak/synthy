@@ -81,8 +81,10 @@ overState l op = state $ \s ->
 
 -- from Prelude or Data.List
 -- unzip :: [(a,b)] -> ([a], [b])
-stateMap :: State s a -> State [s] [a]
-stateMap op = state $ unzip . map (runState op)
+-- stateMap :: State s a -> State [s] [a]
+-- stateMap op = state $ unzip . map (runState op)
+stateMap :: Functor f => State s a -> State (f s) (f a)
+stateMap = injectState
 
 -- from Data.Functor.HT
 -- unzip :: Function f => f (a,b) -> (f a, f b)

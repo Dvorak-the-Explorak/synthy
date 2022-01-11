@@ -15,6 +15,9 @@ import Control.Lens
 import Debug.Trace
 import Data.List (sum)
 
+import Data.Map (Map)
+import qualified Data.Map as Map
+
 import Codec.Midi
 
 import General (Seconds, Pulse, sampleRate, Hz)
@@ -23,7 +26,7 @@ import Voices
 --           stepVoices, noteOnVoicesWith, noteOffVoices, releaseVoice,
 --           note, voiceFinished, cullVoices)
 import Filters
-import Helpers ((.@), stateMap, mapWhere, iterateState, iterateStateUntil)
+import Helpers ((.@), stateMap, injectState, mapWhere, iterateState, iterateStateUntil)
 import MidiStuff (NoteNumber)
 import Envelopes (VolEnv(..), EnvSegment(..), currentState)
 import Oscillators
@@ -32,12 +35,12 @@ import Parameterised
 
 
 
-
 -- FullSynth represents one polyphonic instrument (homogenous voice types)
 -- FullSynth is just a [Voice] with a global filter, modulated by LFO
 
 -- type parameter s is the type of oscillator...
 data FullSynth s = FullSynth {
+  -- _fullSynthVoices :: Map.Map NoteNumber s, 
   _fullSynthVoices :: [s], 
   _fullSynthFilt :: Filter Float,
   _fullSynthLfo :: SimpleOsc,
@@ -51,9 +54,8 @@ makeFields ''FullSynth
 instance (Source s, IsVoice s) => Steppable Seconds Pulse (FullSynth s) where
   step dt  = do
     -- step the [Voice]
-    -- pulse <- overState voices $ stepVoices dt
-    -- pulse <- stepVoices dt .@ voices
-    pulses :: [Pulse] <- step dt .@ voices
+    pulses <- stateMap (step dt) .@ voices
+    -- pulses <- traverse (step dt) .@ voices
     let pulse = sum pulses
     cullFinished .@ voices
 

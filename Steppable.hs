@@ -4,7 +4,8 @@
             , FlexibleInstances
             , FlexibleContexts
             , TemplateHaskell
-            , ConstraintKinds #-}
+            , ConstraintKinds
+            , FunctionalDependencies #-}
 module Steppable where
 
 
@@ -22,15 +23,15 @@ import Helpers
 
 
 -- `s` can be stepped, taking an `a` input, and producing a `b`
-class Steppable i o s where
+class Steppable i o s | i s -> o where
   step :: i -> State s o
 
 type Source s = Steppable Seconds Pulse s
 type Transformer s = Steppable Pulse Pulse s
 
-instance Steppable i o s => Steppable i [o] [s] where
-  -- step :: Seconds -> State 
-  step inp = stateMap $ step inp
+-- instance Steppable i o s => Steppable i [o] [s] where
+--   -- step :: Seconds -> State 
+--   step inp = stateMap $ step inp
 
 
 
