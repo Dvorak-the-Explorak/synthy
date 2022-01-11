@@ -16,7 +16,8 @@ import Debug.Trace
 import Data.List (sum)
 
 import Data.Map (Map)
-import qualified Data.Map as Map
+import qualified Data.Map as Map hiding (insertWith, adjust)
+import qualified Data.Map.Strict as Map
 
 import Codec.Midi
 
@@ -40,8 +41,8 @@ import Parameterised
 
 -- type parameter s is the type of oscillator...
 data FullSynth s = FullSynth {
-  -- _fullSynthVoices :: Map.Map NoteNumber s, 
-  _fullSynthVoices :: [s], 
+  _fullSynthVoices :: Map.Map NoteNumber s, 
+  -- _fullSynthVoices :: [s], 
   _fullSynthFilt :: Filter Float,
   _fullSynthLfo :: SimpleOsc,
   _fullSynthLfoStrength :: Float,
@@ -53,11 +54,12 @@ makeFields ''FullSynth
 -- Source == Steppable Seconds Pulse
 instance (Source s, IsVoice s) => Steppable Seconds Pulse (FullSynth s) where
   step dt  = do
-    -- step the [Voice]
+    -- if voices :: t v, then  pulses :: t Pulse
     pulses <- stateMap (step dt) .@ voices
-    -- pulses <- traverse (step dt) .@ voices
-    let pulse = sum pulses
-    cullFinished .@ voices
+    let pulse = Map.foldl' (+) 0 pulses
+
+    modify (Map.filter (not . finished)) .@ voices
+    -- cullFinished .@ voices
 
     -- run the LFO
     moduland <- step dt .@ lfo
@@ -116,13 +118,11 @@ runFullSynth dt | dt < (1.0/sampleRate) = return []
 noteOnFullSynth :: (Source s, FreqField s, IsVoice s) => 
                     NoteNumber -> State (FullSynth s) ()
 noteOnFullSynth note = do
-  newVoice <- use voiceTemplate
-  -- noteOnVoicesWith (initialiseVoice newVoice) note .@ voices
-  noteOn note newVoice .@ voices
-  -- noteOnVoicesWith (initialiseVoice newVoice) note .@ voices
+  newVoice <- initialise note <$> use voiceTemplate
+  modify (Map.insertWith (flip const) note newVoice) .@ voices
 
 noteOffFullSynth :: IsVoice s => NoteNumber -> State (FullSynth s) ()
-noteOffFullSynth note = noteOff note .@ voices
+noteOffFullSynth note = modify (Map.adjust release note) .@ voices
 
 noteOffAllFullSynth :: IsVoice s => State (FullSynth s) ()
 noteOffAllFullSynth = voices.each %= release
@@ -149,7 +149,7 @@ synthesiseMidiTrack ((ticks, message):messages) = do
 
 defaultSynth :: FullSynth (Voice SimpleOsc (Filter FreqParam))
 defaultSynth = FullSynth {
-  _fullSynthVoices = ([]), 
+  _fullSynthVoices = Map.empty, 
   -- _fullSynthFilt = bandPass (1/sampleRate) & param .~ (220, 880),--param is (low, high)
   -- _fullSynthFilt = centeredBandPass (1/sampleRate) & param .~ (440, 220),--param is (center, width)
   -- _fullSynthFilt = lowPass (1/sampleRate) & param .~ 440,--param is cutoff frequency

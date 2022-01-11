@@ -46,6 +46,9 @@ class IsVoice v where
   release :: v -> v
   finished :: v -> Bool
   maybeRestart :: NoteNumber -> v -> Maybe v
+  -- set the internal state of this voice to the appropriate values for a given note
+  --  (eg. set oscillator frequencies)
+  initialise :: NoteNumber -> v -> v
   --        | which note to turn on
   --        |             | voice template to use
   noteOn :: NoteNumber -> v -> State [v] ()
@@ -72,6 +75,7 @@ instance FreqField s => IsVoice (Voice s f) where
   release = releaseVoice
   finished = voiceFinished
   maybeRestart = maybeRestartVoice
+  initialise = flip initialiseVoice
   noteOn note template = noteOnVoicesWith (initialiseVoice template) note
   noteOff note = noteOffVoices note
 
