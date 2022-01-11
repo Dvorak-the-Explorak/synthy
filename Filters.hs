@@ -5,6 +5,7 @@
            , ExistentialQuantification
            , FlexibleInstances
            , RankNTypes
+           , DeriveGeneric
   #-}
 
 module Filters where
@@ -113,8 +114,8 @@ joinFilters secondInput getResult (Filter s1 p1 r1) (Filter s2 p2 r2) = let
     s = (s1, s2)
     p = (p1, p2)
     r = \(p1', p2') pulse -> do
-      out1 <- r1 p1' pulse .@ _1
-      out2 <- overStar2 p2' $ secondInput (pulse,out1)
+      out1 <- overState _1 $ r1 p1' pulse
+      out2 <- overState _2 $ r2 p2' $ secondInput (pulse,out1)
       return $ getResult (out1,out2)
   in (Filter s p r)
 
@@ -127,21 +128,22 @@ kernelToFilter (Kernel s@(WithStorage store param) go) = Filter store param run
   where
     -- go :: Pulse -> State (s,a) Pulse
     -- run :: a -> Pulse -> State s Pulse
-    -- run :: a -> Pulse -> State s Pulse
     run param pulse = state $ \store -> let 
         (out, WithStorage store' param') = runState (go pulse) s
         -- ignore the modification to param, it shouldn't change in step
       in (out, store')
 -- can't undo k2f, because the storage type is hidden in Filter
 
+
 -- ========================================================================================
 
 -- bandPass :: Seconds -> Filter (FreqParam,FreqParam)
--- setting the frequency explicitly will squash the two frequencies together...
-bandPass dt = highPass2 dt ~> lowPass2 dt
+-- -- setting the frequency explicitly will squash the two frequencies together...
+-- bandPass dt = highPass2 dt ~> lowPass2 dt
+-- changing frequency shifts the center of the band, but keeps the bandwidth
+bandPass dt = centeredBandPass2 dt
 
-
--- Store the frequencies (cutoffs), adjust for center and bandwidth for lenses
+-- store the cutoffs, calculate the center and band for the lenses (`freq` gets center, `bandwidth` gets band width)
 -- how is this the longest thing in the codebase what
 data CBPStore a b = CBPStore a b
 center :: (FreqField a, FreqField b) => CBPStore a b -> Hz
@@ -212,12 +214,8 @@ highPass2 dt = Kernel s go
     s = WithStorage (0,0) $ FreqParam 0
     go = highPassFunc2 dt
 
-hashtagNoFilter :: a -> Filter a
-hashtagNoFilter param = Filter {
-  _filterStorage = (),
-  _filterParam = param,
-  _filterRun = hashtagNoFilterFunc
-}
+
+hashtagNoFilter = Kernel () return
 
 combFilter :: Filter (Float,Int)
 combFilter = Filter {
@@ -225,6 +223,12 @@ combFilter = Filter {
   _filterParam = (0.8, 10),
   _filterRun = combFilterFunc
 }
+
+
+combFilter2 = Kernel s go 
+  where
+    s = CombStore ([], 0.8, 10)
+    go = combFilterFunc2
 
 clipper :: Filter Volume
 clipper = Filter () (1) clipperFunc
@@ -310,6 +314,26 @@ combFilterFunc = (\(strength, delay) pulse -> state $ \history ->
                   else (drop (n-delay+1) $ history) ++ [next]
     in (next, history')
   )
+
+data CombStore = CombStore ([Pulse], Float, Int)
+  deriving Generic
+instance Wrapped CombStore
+
+-- Should this take delay as a Seconds parameter instead of samples?
+combFilterFunc2 :: Pulse -> State CombStore Pulse
+combFilterFunc2 pulse = do
+  history <- use $ _Wrapped' . _1
+  strength <- use $ _Wrapped' . _2
+  let next = if null history 
+          then pulse
+          else pulse + strength * (head history)
+  let n = length history
+  delay <- use $ _Wrapped' . _3
+
+  _Wrapped' . _1 .= if n < delay
+                      then history ++ [next]
+                      else (drop (n-delay+1) $ history) ++ [next]
+  return next
 
 
 clipperFunc :: FilterFunc () Volume

@@ -5,6 +5,7 @@
            , FlexibleInstances
            , FlexibleContexts
            , ScopedTypeVariables
+           , RankNTypes
   #-}
 
 module Synths where
