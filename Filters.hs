@@ -114,13 +114,14 @@ joinFilters secondInput getResult (Filter s1 p1 r1) (Filter s2 p2 r2) = let
   in (Filter s p r)
 
 -- makes functionally identical representations while refactoring
-kernelToFilter :: Kernel (s, a) Pulse Pulse -> Filter a
-kernelToFilter (Kernel (store, param) go) = Filter store param run
+kernelToFilter :: Kernel (ParamSecond s a) Pulse Pulse -> Filter a
+kernelToFilter (Kernel (ParamSecond (store, param)) go) = Filter store param run
   where
-    -- go :: Pulse -> State (Pulse,Hz) Pulse
-    -- run :: Hz -> Pulse -> State Pulse Pulse
+    -- go :: Pulse -> State (s,a) Pulse
+    -- run :: a -> Pulse -> State s Pulse
+    -- run :: a -> Pulse -> State s Pulse
     run param pulse = state $ \store -> let 
-        (out, (store', param')) = runState (go pulse) $ (store, param)
+        (out, ParamSecond (store', param')) = runState (go pulse) $ ParamSecond (store, param)
         -- ignore the modification to param, it shouldn't change in step
       in (out, store')
 -- can't undo k2f, because the storage type is hidden in Filter
@@ -140,16 +141,18 @@ centeredBandPass dt = let
   in sequenceFiltersPacked packParam getParam (highPass dt) (lowPass dt)
 
 lowPass :: Seconds -> Filter FreqParam 
-lowPass dt = Filter {
-  _filterStorage = 0,
-  _filterParam = FreqParam 0,
-  _filterRun = lowPassFunc dt
-}
+lowPass = kernelToFilter . lowPass2
+-- lowPass dt = Filter {
+--   _filterStorage = 0,
+--   _filterParam = FreqParam 0,
+--   _filterRun = lowPassFunc dt
+-- }
 
--- lowPass2 :: Seconds -> Filter FreqParam
--- lowPass2 dt = kernelToFilter $ Kernel s go
---   where
---     s = (0, FreqParam 0)
+lowPass2 :: Seconds -> Kernel (ParamSecond Pulse FreqParam) Pulse Pulse
+lowPass2 dt = Kernel s go
+  where
+    s = ParamSecond (0, FreqParam 0)
+    go = lowPassFunc2 dt
 
 
 highPass :: Seconds -> Filter FreqParam
@@ -204,14 +207,14 @@ lowPassFunc dt = (\(FreqParam cutoff) pulse -> state $ \prev ->
   in (next, next)
   )
 
---                         (----- Kernel go function -----) 
-lowPassFunc2 :: Seconds -> Pulse -> State (Pulse, Hz) Pulse
-lowPassFunc2 dt = \pulse -> state $ \(prev, cutoff) -> 
+--                         (--------------- Kernel go function -------------) 
+lowPassFunc2 :: Seconds -> Pulse -> State (ParamSecond Pulse FreqParam) Pulse
+lowPassFunc2 dt = \pulse -> state $ \(ParamSecond (prev, FreqParam cutoff)) -> 
   let 
-    rc = 1/(2*pi*cutoff)
+    rc = 1/(2*pi* cutoff)
     alpha = dt / (rc + dt)
     next = alpha*pulse +  (1-alpha) * prev
-  in (next, (next, cutoff))
+  in (next, ParamSecond (next, FreqParam cutoff))
 
 
 highPassFunc :: Seconds -> FilterFunc (Pulse,Pulse) FreqParam

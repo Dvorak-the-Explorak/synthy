@@ -133,6 +133,7 @@ makeVoice source filt = Voice
     }
   , _voiceFilt = filt
   , _voiceFiltModulate = (\ v f -> f & freq .~ 800 + 16000*v)
+  -- , _voiceFiltModulate = (\ v f -> f)
   }
 
 
@@ -141,4 +142,4 @@ makeVoice source filt = Voice
 defaultVoice = makeVoice source filt 
   where
     source = sawOsc
-    filt = (lowPass (1/sampleRate)) & freq .~ 400
+    filt = (lowPass2 (1/sampleRate)) & freq .~ 400

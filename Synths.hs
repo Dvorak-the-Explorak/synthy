@@ -147,16 +147,17 @@ synthesiseMidiTrack ((ticks, message):messages) = do
 
 
 
-defaultSynth :: FullSynth (Voice SimpleOsc (Filter FreqParam))
+-- defaultSynth :: FullSynth (Voice SimpleOsc (Filter FreqParam))
 defaultSynth = FullSynth {
   _fullSynthVoices = Map.empty, 
   -- _fullSynthFilt = bandPass (1/sampleRate) & param .~ (220, 880),--param is (low, high)
   -- _fullSynthFilt = centeredBandPass (1/sampleRate) & param .~ (440, 220),--param is (center, width)
-  -- _fullSynthFilt = lowPass (1/sampleRate) & param .~ 440,--param is cutoff frequency
+  -- _fullSynthFilt = lowPass (1/sampleRate) & param . freq .~ 440,--param is cutoff frequency
   _fullSynthFilt = cubicFilter & param .~ 0.8,--param is clip limit
   -- _fullSynthFilt = hashtagNoFilter (0,0),
   _fullSynthLfo = lfo1s & freq .~ 0.4,
   _fullSynthLfoStrength = 0.2, -- 400 * 10,
+  -- _fullSynthLfoStrength = 400,
   _fullSynthVoiceTemplate = defaultVoice
 }
 

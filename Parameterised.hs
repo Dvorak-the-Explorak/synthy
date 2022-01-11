@@ -1,5 +1,7 @@
 {-# LANGUAGE DeriveGeneric
-           , FlexibleContexts                 
+           , FlexibleContexts    
+           , FlexibleInstances
+           , MultiParamTypeClasses             
 #-}
 
 module Parameterised where
@@ -24,6 +26,12 @@ instance Wrapped WavetableParam
 newtype ParamSecond a b = ParamSecond (a, b) 
   deriving Generic
 instance Wrapped (ParamSecond a b)
+-- want these instances so we can use `ParamSecond a b` just like `(a,b)`
+instance Field1 (ParamSecond a b) (ParamSecond a b) a a where
+  _1 = _Wrapped' . _1
+instance Field2 (ParamSecond a b) (ParamSecond a b) b b where
+  _2 = _Wrapped' . _2
+
 
 
 
@@ -39,7 +47,7 @@ instance FreqField WavetableParam where
   freq = _Wrapped' . _2
 
 instance FreqField b => FreqField (ParamSecond a b) where
-  freq = _Wrapped' . _2 . freq
+  freq = _2 . freq
 
 
 
@@ -61,4 +69,4 @@ instance WaveIndexField s => WaveIndexField (Kernel s i o) where
 
 
 instance WaveIndexField b => WaveIndexField (ParamSecond a b) where
-  waveIndex = _Wrapped' . _2 . waveIndex
+  waveIndex = _2 . waveIndex
