@@ -45,15 +45,9 @@ class IsVoice v where
   restart :: v -> v
   release :: v -> v
   finished :: v -> Bool
-  maybeRestart :: NoteNumber -> v -> Maybe v
   -- set the internal state of this voice to the appropriate values for a given note
   --  (eg. set oscillator frequencies)
   initialise :: NoteNumber -> v -> v
-  --        | which note to turn on
-  --        |             | voice template to use
-  noteOn :: NoteNumber -> v -> State [v] ()
-  --        | which note to turn off
-  noteOff :: NoteNumber -> State [v] ()
 
 
 data Voice s f = Voice {
@@ -61,8 +55,7 @@ data Voice s f = Voice {
   _voiceVenv :: VolEnv,
   _voiceFiltEnv :: VolEnv,
   _voiceFilt :: f,
-  _voiceFiltModulate :: (Volume -> f -> f), 
-  _voiceNote :: NoteNumber
+  _voiceFiltModulate :: (Volume -> f -> f)
 }
 
 
@@ -74,10 +67,7 @@ instance FreqField s => IsVoice (Voice s f) where
   restart = restartVoice
   release = releaseVoice
   finished = voiceFinished
-  maybeRestart = maybeRestartVoice
-  initialise = flip initialiseVoice
-  noteOn note template = noteOnVoicesWith (initialiseVoice template) note
-  noteOff note = noteOffVoices note
+  initialise = initialiseVoice
 
 -- Source == Steppable Seconds Pulse
 instance (Source s, Transformer f) 
@@ -111,9 +101,8 @@ instance WaveIndexField s => WaveIndexField (Voice s f) where
 
 -- =======================================================================
 
-initialiseVoice :: FreqField s => Voice s f -> NoteNumber -> Voice s f
-initialiseVoice v noteNum = v & source . freq .~ hzFromNoteNumber noteNum
-                              & note .~ noteNum
+initialiseVoice :: FreqField s => NoteNumber -> Voice s f -> Voice s f
+initialiseVoice noteNum v = v & source . freq .~ hzFromNoteNumber noteNum
 
 
 voiceFinished :: Voice s f -> Bool
@@ -125,70 +114,6 @@ releaseVoice = (venv %~ noteOffEnv) . (filtEnv %~ noteOffEnv)
 
 restartVoice :: Voice s f -> Voice s f
 restartVoice = (venv %~ restartEnv) . (filtEnv %~ restartEnv)
-
-maybeRestartVoice :: NoteNumber -> Voice s f -> Maybe (Voice s f)
-maybeRestartVoice noteNum v = 
-  if (v ^. note) == noteNum
-    then Just $ restartVoice v
-    else Nothing
-
-
-
-onMatchingVoice :: NoteNumber -> (Voice s f -> Voice s f) -> Voice s f -> Voice s f
-onMatchingVoice noteNum f v = 
-  if (v ^. note) == noteNum
-    then f v
-    else v
-
-
-
-restartMatchingVoice :: NoteNumber -> Voice s f -> Voice s f
-restartMatchingVoice note = onMatchingVoice note restartVoice
-
-releaseMatchingVoice :: NoteNumber -> Voice s f -> Voice s f
-releaseMatchingVoice note = onMatchingVoice note releaseVoice
-
-
--- ==================================================================================
-
-stepVoices :: (Source s, Transformer f) 
-        => Seconds -> State [Voice s f] Pulse
-stepVoices dt = do
-  output <- fmap sum $ stateMap $ step dt
-  cullVoices
-  return output
-
-cullVoices :: State [Voice s f] ()
-cullVoices = modify (filter running)
-  where running = not . voiceFinished
-
-cullFinished :: IsVoice v => State [v] ()
-cullFinished = modify (filter running)
-  where running = not . finished
-
--- send any voice with given noteNumber back to the start of its envelope
-restartVoices :: NoteNumber -> [Voice s f] -> [Voice s f]
-restartVoices noteNum voices = map (restartMatchingVoice noteNum) voices
-
--- noteOff any voice with given noteNumber (send them to the release part of envelope)
-releaseVoices :: NoteNumber -> [Voice s f] -> [Voice s f]
-releaseVoices noteNum voices = map (releaseMatchingVoice noteNum) voices
-
--- Traverse the list of voices with a maybeRestartVoice function, 
---   if the result is Nothing, create a new one
-noteOnVoicesWith :: (NoteNumber -> Voice s f) ->  NoteNumber -> State [Voice s f] ()
-noteOnVoicesWith makeVoice noteNum = modify $ \voices -> 
-  let 
-    go [] = [makeVoice noteNum]
-    go (v:vs) = case maybeRestartVoice noteNum v of
-                  Nothing -> v : go vs
-                  Just v' -> v' : vs
-  in go voices
-
--- set the envelope of any voices with the corrseponding note to EnvRelease state
-noteOffVoices :: NoteNumber -> State [Voice s f] ()
-noteOffVoices noteNum = modify $ releaseVoices noteNum 
-
 
 -- ===============================================================================
 
@@ -207,6 +132,5 @@ defaultVoice source = Voice {
         _releaseSlope=1, _currentState=EnvAttack, _volume=0
     },
     _voiceFilt = (lowPass (1/sampleRate)) & freq .~ 400,
-    _voiceFiltModulate = (\ v f -> f & freq .~ 800 + 16000*v),
-    _voiceNote = 0
+    _voiceFiltModulate = (\ v f -> f & freq .~ 800 + 16000*v)
 }
