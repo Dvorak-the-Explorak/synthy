@@ -2,3 +2,7 @@
 *.o
 *.hi
 output.bin
+dist/
+dist/*
+dist-newstyle/
+dist-newstyle/*
