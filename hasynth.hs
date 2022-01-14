@@ -19,6 +19,10 @@ import Control.Functor.HT (unzip)
 import Control.Lens
 import Control.Lens.Tuple
 
+import Codec.Midi
+import Codec.ByteString.Parser (runParser, getBytes)
+import Data.WAVE
+
 -- =========================
 import General
 import MidiStuff
@@ -33,11 +37,11 @@ import Synths
 import Scales
 import Helpers
 import DiatonicSequencer
+import MidiSequencer
 import Wavetable
-import Codec.Midi
-import Codec.ByteString.Parser (runParser, getBytes)
-import Data.WAVE
+
 import Debug.Trace
+
 
 -- #TODO interpret more midi messages:
 --    TempoChange and TimeDiv to get the speed of songs right
@@ -67,21 +71,6 @@ x_squared = map ((\x -> x*x) . (/256)) [0..256]
 outputFile :: FilePath
 outputFile = "output.bin"
 
-
-performMidi :: Track Ticks -> [Pulse]
-performMidi = performMidiSquare
-
-performMidiWithSynth :: (Source s, FreqField s, IsVoice s) => 
-                        FullSynth s -> Track Ticks -> [Pulse]
-performMidiWithSynth synth track = evalState (synthesiseMidiTrack track) synth
-
-performMidiSaw :: Track Ticks -> [Pulse]
-performMidiSaw = performMidiWithOscillator sawOsc
-performMidiSquare = performMidiWithOscillator squareOsc
-performMidiSine = performMidiWithOscillator sineOsc
-
-performMidiWithOscillator :: SimpleOsc -> Track Ticks -> [Pulse]
-performMidiWithOscillator osc_ = performMidiWithSynth $ defaultSynth & voiceTemplate.source .~ osc_
 
 -- =====================================================
 -- =====================================================
@@ -141,86 +130,80 @@ saveAs path song = B.writeFile path song
 
 printMidi :: FilePath -> IO ()
 printMidi inputFile = do
-  parsedMidi <- fmap (runParser parseMidi) $ B.readFile inputFile
-  case parsedMidi of
-    (Left errorString) -> putStrLn errorString
-    (Right midi) -> do
-      putStrLn $ show $ timeDiv midi
-      putStrLn $ (show $ length $ tracks midi) ++ " tracks found"
-      mapM (mapM putStrLn . map show) $ tracks midi
-      return ()
+  midi <- getMidi inputFile
+  
+  putStrLn $ show $ timeDiv midi
+  putStrLn $ (show $ length $ tracks midi) ++ " tracks found"
+  mapM (mapM putStrLn . map show) $ tracks midi
+  return ()
 
 
 playOnabots :: IO ()
 playOnabots = do
-  parsedMidi <- fmap (runParser parseMidi) $ B.readFile "onabots_2.mid"
-  case parsedMidi of
-    (Left errorString) -> putStrLn errorString
-    (Right midi) -> do
-      putStrLn $ show $ timeDiv midi
-      putStrLn $ show $ length $ tracks midi
+  midi <- getMidi "onabots_2.mid"
 
-      -- data
+  putStrLn $ show $ timeDiv midi
+  putStrLn $ show $ length $ tracks midi
 
-      -- sawtooth, 
-      -- pure, 
-      -- sawtooth, 
-      -- square
-      -- pure
-      -- pure / square 
-      -- drum
+  -- data
 
-      -- #TODO interpret the midi TimeDiv and TempoChange messages to work out the time steps
-      let pulsesFromTracks track = performMidi $ map (first (*24)) track
+  -- sawtooth, 
+  -- pure, 
+  -- sawtooth, 
+  -- square
+  -- pure
+  -- pure / square 
+  -- drum
 
-      let timeScale = first (*24)
+  -- #TODO interpret the midi TimeDiv and TempoChange messages to work out the time steps
+  let pulsesFromTracks track = performMidi $ map (first (*24)) track
+
+  let timeScale = first (*24)
 
 
-      let v1 = performMidiSaw $ map timeScale $ (tracks midi) !! 1 
-      let v2 = performMidiSine $ map timeScale $ (tracks midi) !! 2 
-      let v3 = performMidiSaw $ map timeScale $ (tracks midi) !! 3
-      let v4 = performMidiSquare $ map timeScale $ (tracks midi) !! 4
-      let v5 = performMidiSine $ map timeScale $ (tracks midi) !! 5
-      let v6 = performMidiSquare $ map timeScale $ (tracks midi) !! 6 
-      let v7 = performMidiSquare $ map timeScale $ (tracks midi) !! 7
-      let outputs = [v1, v2, v3 ,v4, v5, v6, v7]
-      let pulses = map (hardClip . sum) $ transpose outputs
+  let v1 = performMidiSaw $ map timeScale $ (tracks midi) !! 1 
+  let v2 = performMidiSine $ map timeScale $ (tracks midi) !! 2 
+  let v3 = performMidiSaw $ map timeScale $ (tracks midi) !! 3
+  let v4 = performMidiSquare $ map timeScale $ (tracks midi) !! 4
+  let v5 = performMidiSine $ map timeScale $ (tracks midi) !! 5
+  let v6 = performMidiSquare $ map timeScale $ (tracks midi) !! 6 
+  let v7 = performMidiSquare $ map timeScale $ (tracks midi) !! 7
+  let outputs = [v1, v2, v3 ,v4, v5, v6, v7]
+  let pulses = map (hardClip . sum) $ transpose outputs
 
 
-      -- let drums = performMidiSquare $ map timeScale $ (tracks midi) !! 
-      -- let pulses = map hardClip drums
+  -- let drums = performMidiSquare $ map timeScale $ (tracks midi) !! 
+  -- let pulses = map hardClip drums
 
-      save $ byteStringFromPulses pulses
-      -- runCommand :: String -> IO (processHandleOrSomething)
-      _ <- runCommand $ printf "ffplay -loglevel quiet -loop 1 -showmode 2 -f f32le -ar %f %s" sampleRate outputFile
-      return ()
+  save $ byteStringFromPulses pulses
+  -- runCommand :: String -> IO (processHandleOrSomething)
+  _ <- runCommand $ printf "ffplay -loglevel quiet -loop 1 -showmode 2 -f f32le -ar %f %s" sampleRate outputFile
+  return ()
 
 play :: FilePath -> IO ()
 play inputFile = playWithSynth defaultSynth inputFile
 
+
 playWithSynth :: (Source s, FreqField s, IsVoice s) => 
-                FullSynth s -> FilePath -> IO ()
+                Synth s -> FilePath -> IO ()
 playWithSynth synth inputFile = do
-  parsedMidi <- fmap (runParser parseMidi) $ B.readFile inputFile
-  case parsedMidi of
-    (Left errorString) -> putStrLn errorString
-    (Right midi) -> do
-      putStrLn $ show $ timeDiv midi
-      putStrLn $ (show $ length $ tracks midi) ++ " tracks"
-      -- mapM putStrLn $ map show $ head $ tracks midi 
-      -- mapM putStrLn $ map (show . length) $ tracks midi 
+  midi <- getMidi inputFile
+  putStrLn $ show $ timeDiv midi
+  putStrLn $ (show $ length $ tracks midi) ++ " tracks"
+  -- mapM putStrLn $ map show $ head $ tracks midi 
+  -- mapM putStrLn $ map (show . length) $ tracks midi 
 
-      let timeScale = first (*60)
+  let timeScale = first (*60)
 
-      -- pulses = map hardClip $ performToyMidi testSeq2
-      -- #TODO interpret the midi TimeDiv and TempoChange messages to work out the time steps
-      let pulsesFromTracks track = performMidiWithSynth synth $ map timeScale track
-      let outputs = map pulsesFromTracks $ tracks midi
-      let pulses = map (hardClip . sum) $ transpose outputs
+  -- pulses = map hardClip $ performToyMidi testSeq2
+  -- #TODO interpret the midi TimeDiv and TempoChange messages to work out the time steps
+  let pulsesFromTracks track = performMidiWithSynth synth $ map timeScale track
+  let outputs = map pulsesFromTracks $ tracks midi
+  let pulses = map (hardClip . sum) $ transpose outputs
 
-      save $ byteStringFromPulses pulses
-      -- runCommand :: String -> IO (processHandleOrSomething)
-      _ <- runCommand $ printf "ffplay -loglevel quiet -loop 1 -showmode 2 -f f32le -ar %f %s" sampleRate outputFile
-      return ()
+  save $ byteStringFromPulses pulses
+  -- runCommand :: String -> IO (processHandleOrSomething)
+  _ <- runCommand $ printf "ffplay -loglevel quiet -loop 1 -showmode 2 -f f32le -ar %f %s" sampleRate outputFile
+  return ()
 
 --ffmpeg -f f32le -ar 48000.0 -i output.bin output.mp3

@@ -37,23 +37,23 @@ import Parameterised
 
 
 
--- FullSynth represents one polyphonic instrument (homogenous voice types)
--- FullSynth is just a [Voice] with a global filter, modulated by LFO
+-- Synth represents one polyphonic instrument (homogenous voice types)
+-- Synth is just a [Voice] with a global filter, modulated by LFO
 
 -- type parameter s is the type of oscillator...
-data FullSynth s = FullSynth {
-  _fullSynthVoices :: Map.Map NoteNumber s, 
-  -- _fullSynthVoices :: [s], 
-  _fullSynthFilt :: Filter Float,
-  _fullSynthLfo :: SimpleOsc,
-  _fullSynthLfoStrength :: Float,
-  _fullSynthVoiceTemplate :: s
+data Synth s = Synth {
+  _synthVoices :: Map.Map NoteNumber s, 
+  -- _synthVoices :: [s], 
+  _synthFilt :: Filter Float,
+  _synthLfo :: SimpleOsc,
+  _synthLfoStrength :: Float,
+  _synthVoiceTemplate :: s
 }
 
-makeFields ''FullSynth
+makeFields ''Synth
 
 -- Source == Steppable Seconds Pulse
-instance (Source s, IsVoice s) => Steppable Seconds Pulse (FullSynth s) where
+instance (Source s, IsVoice s) => Steppable Seconds Pulse (Synth s) where
   step dt  = do
     -- if voices :: t v, then  pulses :: t Pulse
     -- pulses :: Map NoteNumber v
@@ -87,79 +87,59 @@ instance (Source s, IsVoice s) => Steppable Seconds Pulse (FullSynth s) where
 
 
 -- Kill any remaining notes, wait for them to ring out
-runFullSynthANiente :: (Source s, IsVoice s) => Seconds -> State (FullSynth s) [Pulse]
-runFullSynthANiente dt = do
-  noteOffAllFullSynth
+runSynthANiente :: (Source s, IsVoice s) => Seconds -> State (Synth s) [Pulse]
+runSynthANiente dt = do
+  noteOffAllSynth
   iterateStateUntil (uses voices null) (step dt)
 
-runFullSynthSteps :: (Source s, IsVoice s) => Int -> Seconds -> State (FullSynth s) [Pulse]
--- runFullSynthSteps 0 dt = return []
--- runFullSynthSteps n dt = do
---   pulse <- stepFullSynth dt
---   pulses <- runFullSynthSteps (n-1) dt
---   return (pulse:pulses)
-runFullSynthSteps n dt = iterateState n (step dt)
+runSynthSteps :: (Source s, IsVoice s) => Int -> Seconds -> State (Synth s) [Pulse]
+runSynthSteps n dt = iterateState n (step dt)
 
 -- Chunks the timestep into at most 1 second long chunks
 --    this helps when voices end early,
 --    as they're only culled once per call to runSynthSteps
 --    and leaving them in the EnvDone state will waste time calculating zeros
 -- #TODO could the EnvDone state be signalled somehow to automate the culling?
-runFullSynth :: (Source s, IsVoice s) => Seconds -> State (FullSynth s) [Pulse]
-runFullSynth dt | dt < (1.0/sampleRate) = return []
+runSynth :: (Source s, IsVoice s) => Seconds -> State (Synth s) [Pulse]
+runSynth dt | dt < (1.0/sampleRate) = return []
                 | dt > 1.0 = do 
-                    firstSec <- runFullSynthSteps (floor sampleRate) (1.0/sampleRate)
-                    remainder <- runFullSynth (dt - 1.0)
+                    firstSec <- runSynthSteps (floor sampleRate) (1.0/sampleRate)
+                    remainder <- runSynth (dt - 1.0)
                     return $ firstSec ++ remainder
                 | otherwise = let n = floor $ dt*sampleRate
-                          in runFullSynthSteps n (1.0/sampleRate)
+                          in runSynthSteps n (1.0/sampleRate)
 
 
 
-noteOnFullSynth :: (Source s, FreqField s, IsVoice s) => 
-                    NoteNumber -> State (FullSynth s) ()
-noteOnFullSynth note = do
+noteOnSynth :: (Source s, FreqField s, IsVoice s) => 
+                    NoteNumber -> State (Synth s) ()
+noteOnSynth note = do
   newVoice <- initialise note <$> use voiceTemplate
   voices %= Map.insertWith (flip const) note newVoice
 
-noteOffFullSynth :: IsVoice s => NoteNumber -> State (FullSynth s) ()
-noteOffFullSynth note = voices %= Map.adjust release note
+noteOffSynth :: IsVoice s => NoteNumber -> State (Synth s) ()
+noteOffSynth note = voices %= Map.adjust release note
 
-noteOffAllFullSynth :: IsVoice s => State (FullSynth s) ()
-noteOffAllFullSynth = voices.each %= release
-
-
--- ================================================================================
+noteOffAllSynth :: IsVoice s => State (Synth s) ()
+noteOffAllSynth = voices.each %= release
 
 
-synthesiseMidiTrack :: (Source s, FreqField s, IsVoice s) => 
-                      Track Ticks -> State (FullSynth s) [Pulse]
-synthesiseMidiTrack [] = runFullSynthANiente (1/sampleRate)
-synthesiseMidiTrack ((ticks, message):messages) = do
-    output <- runFullSynthSteps ticks (1/sampleRate)
-    case message of
-      NoteOff ch key vel -> noteOffFullSynth key 
-      NoteOn ch key 0 -> noteOffFullSynth key 
-      NoteOn ch key vel -> noteOnFullSynth key
-      _ -> return ()
-    remainder <- synthesiseMidiTrack messages
-    return $ output ++ remainder
 -- ==============================================================================
 
 
 
--- defaultSynth :: FullSynth (Voice SimpleOsc (Filter FreqParam))
-defaultSynth = FullSynth {
-  _fullSynthVoices = Map.empty, 
-  -- _fullSynthFilt = bandPass (1/sampleRate) & param .~ (220, 880),--param is (low, high)
-  -- _fullSynthFilt = centeredBandPass (1/sampleRate) & param .~ (440, 220),--param is (center, width)
-  -- _fullSynthFilt = lowPass (1/sampleRate) & param . freq .~ 440,--param is cutoff frequency
-  _fullSynthFilt = cubicFilter & param .~ 0.8,--param is clip limit
-  -- _fullSynthFilt = hashtagNoFilter (0,0),
-  _fullSynthLfo = lfo1s & freq .~ 0.4,
-  _fullSynthLfoStrength = 0.2, -- 400 * 10,
-  -- _fullSynthLfoStrength = 400,
-  _fullSynthVoiceTemplate = defaultVoice
+-- defaultSynth :: Synth (Voice SimpleOsc (Filter FreqParam))
+defaultSynth = Synth {
+  _synthVoices = Map.empty, 
+  -- _synthFilt = bandPass (1/sampleRate) & param .~ (220, 880),--param is (low, high)
+  -- _synthFilt = centeredBandPass (1/sampleRate) & param .~ (440, 220),--param is (center, width)
+  -- _synthFilt = lowPass (1/sampleRate) & param . freq .~ 440,--param is cutoff frequency
+  _synthFilt = cubicFilter & param .~ 0.8,--param is clip limit
+  -- _synthFilt = hashtagNoFilter (0,0),
+  _synthLfo = lfo1s & freq .~ 0.4,
+  _synthLfoStrength = 0.2, -- 400 * 10,
+  -- _synthLfoStrength = 400,
+  _synthVoiceTemplate = defaultVoice
 }
 
 
