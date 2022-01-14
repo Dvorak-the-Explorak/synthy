@@ -141,6 +141,19 @@ playOnabots :: IO ()
 playOnabots = do
   midi <- getMidi "onabots_2.mid"
 
+
+  -- Perc notes
+  -- __Closed Hi-Hat (42)
+  -- __Electric Bass Drum (36)
+  -- __Low Tom (45)
+  -- __Splash Cymbal (55)
+  -- __Acoustic Snare (38)
+  -- __Chinese Cymbal (52)
+  -- __Crash Cymbal 1 (49)
+  -- __Low-Mid Tom (47)
+  -- __High Floor Tom (43)
+  -- __Low Floor Tom (41)
+
   putStrLn $ show $ timeDiv midi
   putStrLn $ show $ length $ tracks midi
 
