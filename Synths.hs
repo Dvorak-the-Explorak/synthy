@@ -183,8 +183,6 @@ simpleSynth :: SimpleOsc -> AnySynth
 simpleSynth osc = AnySynth $ defaultSynth & voiceTemplate.source .~ osc
 
 
-
--- defaultSynth :: Synth (Voice SimpleOsc (Filter FreqParam))
 defaultSynth = Synth {
   _synthVoices = Map.empty, 
   -- _synthFilt = bandPass (1/sampleRate) & param .~ (220, 880),--param is (low, high)

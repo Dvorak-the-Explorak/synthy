@@ -4,6 +4,7 @@
            , TypeSynonymInstances
            , ExistentialQuantification
            , FlexibleInstances
+           , FlexibleContexts
            , RankNTypes
            , DeriveGeneric
   #-}
@@ -176,6 +177,7 @@ instance (FreqField a, FreqField b) => BandwidthField (CBPStore a b)  where
       set s x = s & _1 . freq .~ (center s - x/2) 
                   & _2 . freq .~ (center s + x/2)
 
+
 centeredBandPass :: Seconds -> Filter (FreqParam,FreqParam)
 centeredBandPass dt = let 
     packParam = \(FreqParam lo, FreqParam hi) -> (FreqParam $ (lo+hi)/2, FreqParam $ hi-lo)
@@ -214,25 +216,51 @@ combFilter = Filter {
   _filterRun = combFilterFunc
 }
 
+
 combFilter2 = Kernel s go 
   where
     s = CombStore ([], 0.8, 10)
     go = combFilterFunc2
 
+
 clipper :: Filter Volume
 clipper = Filter () (1) clipperFunc
+
+clipper2 :: Kernel Volume Pulse Pulse
+clipper2 = Kernel 1.0 go
+  where
+    go pulse = do
+      limit <- get
+      return $ (/limit) $ hardClipLimit limit pulse
 
 -- -- has no internal state, just applies a given function
 pureFilter :: (Pulse -> Pulse) -> Filter ()
 pureFilter f = Filter () () (const $ return . f)
+
+pureFilter2 :: (Pulse -> Pulse) -> Kernel () Pulse Pulse
+pureFilter2 f = Kernel () (return . f)
 
 -- cubicFilter :: Filter ()
 -- cubicFilter = pureFilter (**3)
 cubicFilter :: Filter Float
 cubicFilter = Filter () 1 (\strength pulse -> return $ strength*pulse**3 + (1-strength)*pulse)
 
+cubicFilter2 :: Kernel Float Pulse Pulse
+cubicFilter2 = Kernel 1.0 go
+  where
+    go pulse = do
+      strength <- get
+      return $ strength*pulse**3 + (1-strength)*pulse
+
 gainFilter :: Filter Float
 gainFilter = Filter () 1 (\gain -> return . (*gain)) 
+
+gainFilter2 :: Kernel Float Pulse Pulse
+gainFilter2 = Kernel 1.0 go
+  where
+    go pulse = do
+      gain <- get
+      return $ pulse * gain
 
 -- ================================
 
