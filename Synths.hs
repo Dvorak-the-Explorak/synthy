@@ -6,6 +6,7 @@
            , FlexibleContexts
            , ScopedTypeVariables
            , RankNTypes
+           , ExistentialQuantification
   #-}
 
 module Synths where
@@ -36,21 +37,39 @@ import Steppable
 import Parameterised
 
 
+-- #TODO can this be neater so I don't need all this shit???
+class IsSynth s where
+  _runSynthSteps :: Int -> Seconds -> State s [Pulse]
+  _runSynthANiente :: Seconds -> State s [Pulse]
+  _runSynth :: Seconds -> State s [Pulse]
+  _noteOnSynth :: NoteNumber -> Volume -> State s ()
+  _noteOffSynth :: NoteNumber -> State s ()
+  _noteOffAllSynth :: State s ()
 
 -- Synth represents one polyphonic instrument (homogenous voice types)
 -- Synth is just a [Voice] with a global filter, modulated by LFO
 
--- type parameter s is the type of oscillator...
-data Synth s = Synth {
-  _synthVoices :: Map.Map NoteNumber s, 
-  -- _synthVoices :: [s], 
+
+-- type parameter v is the type of voice...
+data Synth v = Synth {
+  _synthVoices :: Map.Map NoteNumber v, 
   _synthFilt :: Filter Float,
   _synthLfo :: SimpleOsc,
   _synthLfoStrength :: Float,
-  _synthVoiceTemplate :: s
+  _synthVoiceTemplate :: v
 }
 
+data AnySynth = forall v . (Source v, FreqField v, IsVoice v) => AnySynth (Synth v)
+
 makeFields ''Synth
+
+
+
+instance Steppable Seconds Pulse AnySynth where
+  step dt = state $ \(AnySynth synth) -> let
+      (output, synth') = runState (step dt) synth
+    in (output, AnySynth synth')
+
 
 -- Source == Steppable Seconds Pulse
 instance (Source s, IsVoice s) => Steppable Seconds Pulse (Synth s) where
@@ -86,6 +105,39 @@ instance (Source s, IsVoice s) => Steppable Seconds Pulse (Synth s) where
 -- ===================================================================================
 
 
+
+
+-- #TODO find a workaround for all this boilerplate
+instance IsSynth AnySynth where
+  _runSynthANiente dt = state $ \(AnySynth synth) -> let
+      (output, synth') = runState (runSynthANiente dt) synth
+    in (output, AnySynth synth')
+
+
+  _runSynthSteps n dt = state $ \(AnySynth synth) -> let
+      (output, synth') = runState (runSynthSteps n dt) synth
+    in (output, AnySynth synth')
+
+  _runSynth dt = state $ \(AnySynth synth) -> let
+      (output, synth') = runState (runSynth dt) synth
+    in (output, AnySynth synth')
+
+
+
+  _noteOnSynth note vel = state $ \(AnySynth synth) -> let
+      (output, synth') = runState (noteOnSynth note vel) synth
+    in (output, AnySynth synth')
+
+  _noteOffSynth note = state $ \(AnySynth synth) -> let
+      (output, synth') = runState (noteOffSynth note) synth
+    in (output, AnySynth synth')
+
+  _noteOffAllSynth = state $ \(AnySynth synth) -> let
+      (output, synth') = runState noteOffAllSynth synth
+    in (output, AnySynth synth')
+
+
+
 -- Kill any remaining notes, wait for them to ring out
 runSynthANiente :: (Source s, IsVoice s) => Seconds -> State (Synth s) [Pulse]
 runSynthANiente dt = do
@@ -102,12 +154,12 @@ runSynthSteps n dt = iterateState n (step dt)
 -- #TODO could the EnvDone state be signalled somehow to automate the culling?
 runSynth :: (Source s, IsVoice s) => Seconds -> State (Synth s) [Pulse]
 runSynth dt | dt < (1.0/sampleRate) = return []
-                | dt > 1.0 = do 
-                    firstSec <- runSynthSteps (floor sampleRate) (1.0/sampleRate)
-                    remainder <- runSynth (dt - 1.0)
-                    return $ firstSec ++ remainder
-                | otherwise = let n = floor $ dt*sampleRate
-                          in runSynthSteps n (1.0/sampleRate)
+            | dt > 1.0 = do 
+                firstSec <- runSynthSteps (floor sampleRate) (1.0/sampleRate)
+                remainder <- runSynth (dt - 1.0)
+                return $ firstSec ++ remainder
+            | otherwise = let n = floor $ dt*sampleRate
+                      in runSynthSteps n (1.0/sampleRate)
 
 
 

@@ -76,15 +76,11 @@ outputFile = "output.bin"
 -- =====================================================
 
 main = do
-  -- playOnabots
-  -- let midiFile = "c_major.mid"
-  let midiFile = "onabots_2.mid"
-  putStrLn $ printf $ "Playing " ++ midiFile
-  putStrLn "samples per tick:"
 
-  midi <- getMidi midiFile
-  print $ samplesPerTick midi
-  putStrLn "yep"
+  -- playOnabots
+  let midiFile = "c_major.mid"
+  -- let midiFile = "onabots_2.mid"
+  putStrLn $ printf $ "Playing " ++ midiFile
 
   play midiFile
   fail "done"
@@ -99,14 +95,6 @@ main = do
   -- -- putStrLn $ show $ map (sampleToDouble . head) $ waveSamples wav
   putStrLn $ waveFileDescription wav
   -- putStrLn "Hello, world"
-
-  -- let tab = wavetableFromSamples 2048 $ samplesFromWave wav
-  -- putStrLn $ show $ map (tab 0 . (/100.0)) [0..100]
-  -- putStrLn $ show $ map (tab 0.2 . (/100.0)) [0..100]
-  -- putStrLn $ show $ map (tab 0.4 . (/100.0)) [0..100]
-  -- putStrLn $ show $ map (tab 0.6 . (/100.0)) [0..100]
-  -- putStrLn $ show $ map (tab 0.8 . (/100.0)) [0..100]
-  -- putStrLn $ show $ map (tab 1 . (/100.0)) [0..100]
 
   let samples = samplesFromWave wav
   
@@ -200,7 +188,7 @@ playOld inputFile = playWithSynth defaultSynth inputFile
 play :: FilePath -> IO ()
 play inputFile = do
   midi <- getMidi inputFile
-  let pulses = synthesiseMidi midi
+  let pulses = synthesiseMidi (const $ AnySynth defaultSynth) midi
   saveAndPlaySound pulses
 
 
