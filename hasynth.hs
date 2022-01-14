@@ -19,6 +19,9 @@ import Control.Functor.HT (unzip)
 import Control.Lens
 import Control.Lens.Tuple
 
+import Data.Map.Strict (Map)
+import qualified Data.Map.Strict as Map
+
 import Codec.Midi
 import Codec.ByteString.Parser (runParser, getBytes)
 import Data.WAVE
@@ -77,12 +80,12 @@ outputFile = "output.bin"
 
 main = do
 
-  -- playOnabots
-  let midiFile = "c_major.mid"
-  -- let midiFile = "onabots_2.mid"
-  putStrLn $ printf $ "Playing " ++ midiFile
+  playOnabots
+  -- let midiFile = "c_major.mid"
+  -- -- let midiFile = "onabots_2.mid"
+  -- putStrLn $ printf $ "Playing " ++ midiFile
 
-  play midiFile
+  -- play midiFile
   fail "done"
 
 
@@ -150,24 +153,23 @@ playOnabots = do
   putStrLn $ show $ timeDiv midi
   putStrLn $ show $ length $ tracks midi
 
-  -- data
 
-  -- sawtooth, 
-  -- pure, 
-  -- sawtooth, 
-  -- square
-  -- pure
-  -- pure / square 
-  -- drum
+  let instruments = Map.fromList  [ (102, AnySynth $ simpleSynth sawOsc)
+                              , (80, AnySynth $ simpleSynth sineOsc)
+                              , (81, AnySynth $ simpleSynth sawOsc)
+                              , (83, AnySynth $ simpleSynth squareOsc)
+                              , (16, AnySynth $ simpleSynth sineOsc)
+                              , (33, AnySynth $ simpleSynth squareOsc)
+                              , (0, AnySynth $ simpleSynth sawOsc)
+                              ]
 
-  -- #TODO interpret the midi TimeDiv and TempoChange messages to work out the time steps
-  -- let pulsesFromTracks track = performMidi $ map (first (*24)) track
 
-  let timeScale = first (*24)
+  -- let trackPulses = zipWith (\ osc track -> performMidiWithOscillator osc track) 
+  --                     [sawOsc, sineOsc, sawOsc, squareOsc, sineOsc, squareOsc, squareOsc] 
+  --                     (tracks midi)
 
-  let trackPulses = zipWith (\ osc track -> performMidiWithOscillator osc track) 
-                      [sawOsc, sineOsc, sawOsc, squareOsc, sineOsc, squareOsc, squareOsc] 
-                      (tracks midi)
+  let getSynth n = Map.findWithDefault (AnySynth $ simpleSynth sineOsc) n instruments
+  let pulses = synthesiseMidi getSynth midi 
 
   -- let v1 = performMidiSaw $ map timeScale $ (tracks midi) !! 1 
   -- let v2 = performMidiSine $ map timeScale $ (tracks midi) !! 2 
@@ -177,7 +179,7 @@ playOnabots = do
   -- let v6 = performMidiSquare $ map timeScale $ (tracks midi) !! 6 
   -- let v7 = performMidiSquare $ map timeScale $ (tracks midi) !! 7
   -- let outputs = [v1, v2, v3 ,v4, v5, v6, v7]
-  let pulses = map (hardClip . sum) $ transpose trackPulses
+  -- let pulses = map (hardClip . sum) $ transpose trackPulses
 
   saveAndPlaySound pulses
 
