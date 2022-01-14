@@ -126,6 +126,10 @@ noteOffAllSynth = voices.each %= release
 
 -- ==============================================================================
 
+-- simpleSynth :: SimpleOsc -> Synth (Voice of some sort)
+-- simpleSynth :: (IsVoice v, Source v) => SimpleOsc -> Synth v
+simpleSynth osc = defaultSynth & voiceTemplate.source .~ osc
+
 
 
 -- defaultSynth :: Synth (Voice SimpleOsc (Filter FreqParam))

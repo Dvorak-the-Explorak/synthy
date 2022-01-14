@@ -12,6 +12,7 @@
 module Voices where
 
 -- A voice is an enveloped sound source.
+-- The envelope must be finite after NoteOff
 
 
 

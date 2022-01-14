@@ -76,6 +76,20 @@ outputFile = "output.bin"
 -- =====================================================
 
 main = do
+  -- playOnabots
+  let midiFile = "c_major.mid"
+  putStrLn $ printf $ "Playing " ++ midiFile
+  putStrLn "samples per tick:"
+
+  midi <- getMidi midiFile
+  print $ samplesPerTick midi
+  putStrLn "yep"
+
+  play midiFile
+  fail "done"
+
+
+
   -- wavFile <- (Wav.importFile "ESW_FM_Grizzly.wav") :: IO ( Either String (Audio Int16))
   -- wavFile <- getBytes 58 Wav.parseWav $ B.readFile "ESW_FM_Grizzly.wav"
   -- raw_wav <- return $ BG.runGet Wav.parseWav $ B.readFile "ESW_FM_Grizzly.wav"
@@ -94,11 +108,6 @@ main = do
   -- putStrLn $ show $ map (tab 1 . (/100.0)) [0..100]
 
   let samples = samplesFromWave wav
-  -- putStrLn $ show $ (minimum samples, maximum samples)
-
-
-  -- let someOsc = simpleOsc $ waveformFromSamples $ take 2048 $ drop (2048*50) samples 
-  -- let wtOsc = wavetableOsc $ loadWavetable 2048 wav
   
   g <- newStdGen
   -- let synth = defaultSynth & voiceTemplate.source .~ (noisy g 0.4 sawOsc)
@@ -128,10 +137,17 @@ save song = saveAs outputFile song
 saveAs :: FilePath -> B.ByteString -> IO()
 saveAs path song = B.writeFile path song
 
+saveAndPlaySound :: [Pulse] -> IO ()
+saveAndPlaySound pulses = do
+  save $ byteStringFromPulses pulses
+  -- runCommand :: String -> IO (processHandleOrSomething)
+  _ <- runCommand $ printf "ffplay -loglevel quiet -loop 1 -showmode 2 -f f32le -ar %f %s" sampleRate outputFile
+  return ()
+
 printMidi :: FilePath -> IO ()
 printMidi inputFile = do
   midi <- getMidi inputFile
-  
+
   putStrLn $ show $ timeDiv midi
   putStrLn $ (show $ length $ tracks midi) ++ " tracks found"
   mapM (mapM putStrLn . map show) $ tracks midi
@@ -156,32 +172,35 @@ playOnabots = do
   -- drum
 
   -- #TODO interpret the midi TimeDiv and TempoChange messages to work out the time steps
-  let pulsesFromTracks track = performMidi $ map (first (*24)) track
+  -- let pulsesFromTracks track = performMidi $ map (first (*24)) track
 
   let timeScale = first (*24)
 
+  let trackPulses = zipWith (\ osc track -> performMidiWithOscillator osc track) 
+                      [sawOsc, sineOsc, sawOsc, squareOsc, sineOsc, squareOsc, squareOsc] 
+                      (tracks midi)
 
-  let v1 = performMidiSaw $ map timeScale $ (tracks midi) !! 1 
-  let v2 = performMidiSine $ map timeScale $ (tracks midi) !! 2 
-  let v3 = performMidiSaw $ map timeScale $ (tracks midi) !! 3
-  let v4 = performMidiSquare $ map timeScale $ (tracks midi) !! 4
-  let v5 = performMidiSine $ map timeScale $ (tracks midi) !! 5
-  let v6 = performMidiSquare $ map timeScale $ (tracks midi) !! 6 
-  let v7 = performMidiSquare $ map timeScale $ (tracks midi) !! 7
-  let outputs = [v1, v2, v3 ,v4, v5, v6, v7]
-  let pulses = map (hardClip . sum) $ transpose outputs
+  -- let v1 = performMidiSaw $ map timeScale $ (tracks midi) !! 1 
+  -- let v2 = performMidiSine $ map timeScale $ (tracks midi) !! 2 
+  -- let v3 = performMidiSaw $ map timeScale $ (tracks midi) !! 3
+  -- let v4 = performMidiSquare $ map timeScale $ (tracks midi) !! 4
+  -- let v5 = performMidiSine $ map timeScale $ (tracks midi) !! 5
+  -- let v6 = performMidiSquare $ map timeScale $ (tracks midi) !! 6 
+  -- let v7 = performMidiSquare $ map timeScale $ (tracks midi) !! 7
+  -- let outputs = [v1, v2, v3 ,v4, v5, v6, v7]
+  let pulses = map (hardClip . sum) $ transpose trackPulses
+
+  saveAndPlaySound pulses
 
 
-  -- let drums = performMidiSquare $ map timeScale $ (tracks midi) !! 
-  -- let pulses = map hardClip drums
-
-  save $ byteStringFromPulses pulses
-  -- runCommand :: String -> IO (processHandleOrSomething)
-  _ <- runCommand $ printf "ffplay -loglevel quiet -loop 1 -showmode 2 -f f32le -ar %f %s" sampleRate outputFile
-  return ()
+playOld :: FilePath -> IO ()
+playOld inputFile = playWithSynth defaultSynth inputFile
 
 play :: FilePath -> IO ()
-play inputFile = playWithSynth defaultSynth inputFile
+play inputFile = do
+  midi <- getMidi inputFile
+  let pulses = synthesiseMidi midi
+  saveAndPlaySound pulses
 
 
 playWithSynth :: (Source s, FreqField s, IsVoice s) => 
@@ -201,9 +220,10 @@ playWithSynth synth inputFile = do
   let outputs = map pulsesFromTracks $ tracks midi
   let pulses = map (hardClip . sum) $ transpose outputs
 
-  save $ byteStringFromPulses pulses
-  -- runCommand :: String -> IO (processHandleOrSomething)
-  _ <- runCommand $ printf "ffplay -loglevel quiet -loop 1 -showmode 2 -f f32le -ar %f %s" sampleRate outputFile
-  return ()
+  saveAndPlaySound pulses
 
+
+
+
+-- to play:
 --ffmpeg -f f32le -ar 48000.0 -i output.bin output.mp3
