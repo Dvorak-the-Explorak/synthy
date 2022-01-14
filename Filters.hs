@@ -142,7 +142,7 @@ kernelToFilter (Kernel s@(WithStorage store param) go) = Filter store param run
 -- -- setting the frequency explicitly will squash the two frequencies together...
 -- bandPass dt = highPass2 dt ~> lowPass2 dt
 -- changing frequency shifts the center of the band, but keeps the bandwidth
-bandPass dt = centeredBandPass2 dt
+bandPass dt = centeredBandPass dt
 
 -- store the cutoffs, calculate the center and band for the lenses (`freq` gets center, `bandwidth` gets band width)
 -- how is this the longest thing in the codebase what
@@ -178,30 +178,30 @@ instance (FreqField a, FreqField b) => BandwidthField (CBPStore a b)  where
                   & _2 . freq .~ (center s + x/2)
 
 
-centeredBandPass :: Seconds -> Filter (FreqParam,FreqParam)
-centeredBandPass dt = let 
-    packParam = \(FreqParam lo, FreqParam hi) -> (FreqParam $ (lo+hi)/2, FreqParam $ hi-lo)
-    getParam = \(FreqParam center, FreqParam bandwidth) -> (FreqParam $ center-bandwidth, FreqParam $ center+bandwidth)
-  in sequenceFiltersPacked packParam getParam (highPass dt) (lowPass dt)
+-- centeredBandPass :: Seconds -> Filter (FreqParam,FreqParam)
+-- centeredBandPass dt = let 
+--     packParam = \(FreqParam lo, FreqParam hi) -> (FreqParam $ (lo+hi)/2, FreqParam $ hi-lo)
+--     getParam = \(FreqParam center, FreqParam bandwidth) -> (FreqParam $ center-bandwidth, FreqParam $ center+bandwidth)
+--   in sequenceFiltersPacked packParam getParam (highPass dt) (lowPass dt)
 
 -- centeredBandPass2 :: Seconds -> Kernel (CBPStore blah blah) Pulse Pulse
-centeredBandPass2 dt = seqKernelsWith CBPStore (lowPass2 dt) (highPass2 dt)
+centeredBandPass dt = seqKernelsWith CBPStore (lowPass dt) (highPass dt)
 
-lowPass :: Seconds -> Filter FreqParam 
-lowPass = kernelToFilter . lowPass2
+-- lowPass :: Seconds -> Filter FreqParam 
+-- lowPass = kernelToFilter . lowPass2
 
-lowPass2 :: Seconds -> Kernel (WithStorage Pulse FreqParam) Pulse Pulse
-lowPass2 dt = Kernel s go
+lowPass :: Seconds -> Kernel (WithStorage Pulse FreqParam) Pulse Pulse
+lowPass dt = Kernel s go
   where
     s = WithStorage 0 (FreqParam 0)
     go = lowPassFunc2 dt
 
 
-highPass :: Seconds -> Filter FreqParam
-highPass = kernelToFilter . highPass2
+-- highPass :: Seconds -> Filter FreqParam
+-- highPass = kernelToFilter . highPass2
 
-highPass2 :: Seconds -> Kernel (WithStorage (Pulse,Pulse) FreqParam) Pulse Pulse
-highPass2 dt = Kernel s go
+highPass :: Seconds -> Kernel (WithStorage (Pulse,Pulse) FreqParam) Pulse Pulse
+highPass dt = Kernel s go
   where
     s = WithStorage (0,0) $ FreqParam 0
     go = highPassFunc2 dt
@@ -209,54 +209,54 @@ highPass2 dt = Kernel s go
 
 hashtagNoFilter = Kernel () return
 
-combFilter :: Filter (Float,Int)
-combFilter = Filter {
-  _filterStorage = [],
-  _filterParam = (0.8, 10),
-  _filterRun = combFilterFunc
-}
+-- combFilter :: Filter (Float,Int)
+-- combFilter = Filter {
+--   _filterStorage = [],
+--   _filterParam = (0.8, 10),
+--   _filterRun = combFilterFunc
+-- }
 
 
-combFilter2 = Kernel s go 
+combFilter = Kernel s go 
   where
     s = CombStore ([], 0.8, 10)
     go = combFilterFunc2
 
 
-clipper :: Filter Volume
-clipper = Filter () (1) clipperFunc
+-- clipper :: Filter Volume
+-- clipper = Filter () (1) clipperFunc
 
-clipper2 :: Kernel Volume Pulse Pulse
-clipper2 = Kernel 1.0 go
+clipper :: Kernel Volume Pulse Pulse
+clipper = Kernel 1.0 go
   where
     go pulse = do
       limit <- get
       return $ (/limit) $ hardClipLimit limit pulse
 
--- -- has no internal state, just applies a given function
-pureFilter :: (Pulse -> Pulse) -> Filter ()
-pureFilter f = Filter () () (const $ return . f)
+-- -- -- has no internal state, just applies a given function
+-- pureFilter :: (Pulse -> Pulse) -> Filter ()
+-- pureFilter f = Filter () () (const $ return . f)
 
-pureFilter2 :: (Pulse -> Pulse) -> Kernel () Pulse Pulse
-pureFilter2 f = Kernel () (return . f)
+pureFilter :: (Pulse -> Pulse) -> Kernel () Pulse Pulse
+pureFilter f = Kernel () (return . f)
 
--- cubicFilter :: Filter ()
--- cubicFilter = pureFilter (**3)
-cubicFilter :: Filter Float
-cubicFilter = Filter () 1 (\strength pulse -> return $ strength*pulse**3 + (1-strength)*pulse)
+-- -- cubicFilter :: Filter ()
+-- -- cubicFilter = pureFilter (**3)
+-- cubicFilter :: Filter Float
+-- cubicFilter = Filter () 1 (\strength pulse -> return $ strength*pulse**3 + (1-strength)*pulse)
 
-cubicFilter2 :: Kernel Float Pulse Pulse
-cubicFilter2 = Kernel 1.0 go
+cubicFilter :: Kernel Float Pulse Pulse
+cubicFilter = Kernel 1.0 go
   where
     go pulse = do
       strength <- get
       return $ strength*pulse**3 + (1-strength)*pulse
 
-gainFilter :: Filter Float
-gainFilter = Filter () 1 (\gain -> return . (*gain)) 
+-- gainFilter :: Filter Float
+-- gainFilter = Filter () 1 (\gain -> return . (*gain)) 
 
-gainFilter2 :: Kernel Float Pulse Pulse
-gainFilter2 = Kernel 1.0 go
+gainFilter :: Kernel Float Pulse Pulse
+gainFilter = Kernel 1.0 go
   where
     go pulse = do
       gain <- get
@@ -264,18 +264,18 @@ gainFilter2 = Kernel 1.0 go
 
 -- ================================
 
-hashtagNoFilterFunc :: FilterFunc () a
-hashtagNoFilterFunc = const return 
+-- hashtagNoFilterFunc :: FilterFunc () a
+-- hashtagNoFilterFunc = const return 
 
 rcFromCutoff :: Hz -> Float
 rcFromCutoff f = 1/(2*pi*f)
 
-lowPassFunc :: Seconds -> FilterFunc Pulse FreqParam
-lowPassFunc dt = \(FreqParam cutoff) pulse -> state $ \prev -> let 
-    rc = 1/(2*pi*cutoff)
-    alpha = dt / (rc + dt)
-    next = alpha*pulse +  (1-alpha) * prev
-  in (next, next)
+-- lowPassFunc :: Seconds -> FilterFunc Pulse FreqParam
+-- lowPassFunc dt = \(FreqParam cutoff) pulse -> state $ \prev -> let 
+--     rc = 1/(2*pi*cutoff)
+--     alpha = dt / (rc + dt)
+--     next = alpha*pulse +  (1-alpha) * prev
+--   in (next, next)
 
 --                         (--------------- Kernel go function -------------) 
 lowPassFunc2 :: Seconds -> Pulse -> State (WithStorage Pulse FreqParam) Pulse
@@ -288,14 +288,14 @@ lowPassFunc2 dt = \pulse -> do
 
 
 
-highPassFunc :: Seconds -> FilterFunc (Pulse,Pulse) FreqParam
-highPassFunc dt = (\(FreqParam cutoff) pulse -> state $ \(prevOut, prevIn) -> 
-    let 
-      rc = 1/(2*pi*cutoff)
-      alpha = rc / (rc + dt)
-      next = alpha*pulse +  alpha * (prevOut - prevIn)
-    in (next, (next, pulse) ) 
-  )
+-- highPassFunc :: Seconds -> FilterFunc (Pulse,Pulse) FreqParam
+-- highPassFunc dt = (\(FreqParam cutoff) pulse -> state $ \(prevOut, prevIn) -> 
+--     let 
+--       rc = 1/(2*pi*cutoff)
+--       alpha = rc / (rc + dt)
+--       next = alpha*pulse +  alpha * (prevOut - prevIn)
+--     in (next, (next, pulse) ) 
+--   )
 
   --                        (--------------- Kernel go function -------------) 
 highPassFunc2 :: Seconds -> Pulse -> State (WithStorage (Pulse,Pulse) FreqParam) Pulse
@@ -312,19 +312,19 @@ highPassFunc2 dt = \pulse -> do
 
 
 
--- Should this take delay as a Seconds parameter instead of samples?
-combFilterFunc :: FilterFunc [Pulse] (Float,Int)
-combFilterFunc = (\(strength, delay) pulse -> state $ \history ->
-    let
-      n = length history
-      next = if null history
-              then pulse
-              else pulse + strength * (head history)
-      history' = if n < delay
-                  then history ++ [next]
-                  else (drop (n-delay+1) $ history) ++ [next]
-    in (next, history')
-  )
+-- -- Should this take delay as a Seconds parameter instead of samples?
+-- combFilterFunc :: FilterFunc [Pulse] (Float,Int)
+-- combFilterFunc = (\(strength, delay) pulse -> state $ \history ->
+--     let
+--       n = length history
+--       next = if null history
+--               then pulse
+--               else pulse + strength * (head history)
+--       history' = if n < delay
+--                   then history ++ [next]
+--                   else (drop (n-delay+1) $ history) ++ [next]
+--     in (next, history')
+--   )
 
 data CombStore = CombStore ([Pulse], Float, Int)
   deriving Generic
@@ -347,11 +347,11 @@ combFilterFunc2 pulse = do
   return next
 
 
-clipperFunc :: FilterFunc () Volume
--- clipperFunc = \limit pulse-> state $ \() -> (hardClipLimit limit pulse, ())
--- clipperFunc = \limit pulse-> return $ hardClipLimit limit pulse 
--- clipperFunc = return .: hardClipLimit -- no gain
-clipperFunc = \limit ->  return . (/limit) . hardClipLimit limit
+-- clipperFunc :: FilterFunc () Volume
+-- -- clipperFunc = \limit pulse-> state $ \() -> (hardClipLimit limit pulse, ())
+-- -- clipperFunc = \limit pulse-> return $ hardClipLimit limit pulse 
+-- -- clipperFunc = return .: hardClipLimit -- no gain
+-- clipperFunc = \limit ->  return . (/limit) . hardClipLimit limit
 
 
 

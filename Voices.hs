@@ -153,4 +153,4 @@ makeVoice source filt = Voice
 defaultVoice = makeVoice source filt 
   where
     source = sawOsc
-    filt = (lowPass2 (1/sampleRate)) & freq .~ 400
+    filt = (lowPass (1/sampleRate)) & freq .~ 400

@@ -81,12 +81,8 @@ outputFile = "output.bin"
 main = do
 
   let midiFile = "c_major.mid"
-
-  -- playOnabots
-  let midiFile = "c_major.mid"
   -- let midiFile = "onabots_2.mid"
   putStrLn $ printf $ "Playing " ++ midiFile
-
   play midiFile
   fail "done"
 
@@ -101,7 +97,7 @@ main = do
 
   let midiFile = "c_major.mid"
   putStrLn $ printf $ "Playing " ++ midiFile
-  -- playWithSynth (defaultSynth & voiceTemplate.source .~ wtOsc) midiFile
+
   pulses <- synthesiseMidi (const synth) <$> getMidi midiFile
   saveAndPlaySound pulses
 
@@ -168,27 +164,6 @@ play inputFile = do
   midi <- getMidi inputFile
   let pulses = synthesiseMidi (const $ AnySynth defaultSynth) midi
   saveAndPlaySound pulses
-
-
-playWithSynth :: (Source s, FreqField s, IsVoice s) => 
-                Synth s -> FilePath -> IO ()
-playWithSynth synth inputFile = do
-  midi <- getMidi inputFile
-  putStrLn $ show $ timeDiv midi
-  putStrLn $ (show $ length $ tracks midi) ++ " tracks"
-  -- mapM putStrLn $ map show $ head $ tracks midi 
-  -- mapM putStrLn $ map (show . length) $ tracks midi 
-
-  let timeScale = first (*60)
-
-  -- pulses = map hardClip $ performToyMidi testSeq2
-  -- #TODO interpret the midi TimeDiv and TempoChange messages to work out the time steps
-  let pulsesFromTracks track = performMidiWithSynth synth $ map timeScale track
-  let outputs = map pulsesFromTracks $ tracks midi
-  let pulses = map (hardClip . sum) $ transpose outputs
-
-  saveAndPlaySound pulses
-
 
 
 

@@ -51,15 +51,16 @@ class IsSynth s where
 
 
 -- type parameter v is the type of voice...
-data Synth v = Synth {
+data Synth v f = Synth {
   _synthVoices :: Map.Map NoteNumber v, 
-  _synthFilt :: Filter Float,
+  _synthFilt :: f,
   _synthLfo :: SimpleOsc,
   _synthLfoStrength :: Float,
   _synthVoiceTemplate :: v
 }
 
-data AnySynth = forall v . (Source v, FreqField v, IsVoice v) => AnySynth (Synth v)
+data AnySynth = forall v f. (Source v, FreqField v, IsVoice v, Transformer f, FreqField f) => 
+                            AnySynth (Synth v f)
 
 makeFields ''Synth
 
@@ -72,7 +73,7 @@ instance Steppable Seconds Pulse AnySynth where
 
 
 -- Source == Steppable Seconds Pulse
-instance (Source s, IsVoice s) => Steppable Seconds Pulse (Synth s) where
+instance (Source v, IsVoice v, Transformer f, FreqField f) => Steppable Seconds Pulse (Synth v f) where
   step dt  = do
     -- if voices :: t v, then  pulses :: t Pulse
     -- pulses :: Map NoteNumber v
@@ -86,7 +87,7 @@ instance (Source s, IsVoice s) => Steppable Seconds Pulse (Synth s) where
     strength <- use lfoStrength
 
     -- modulate the filter cutoff with the LFO
-    filt.param += strength*moduland
+    filt.freq += strength*moduland
 
     -- -- modulate wavetable indices
     -- -- modify $ over voices $ map (osc.waveIndex .~ (moduland+1)/2)
@@ -98,7 +99,7 @@ instance (Source s, IsVoice s) => Steppable Seconds Pulse (Synth s) where
     -- let output = pulse
 
     -- unmodulate the filter cutoff
-    filt.param -= strength*moduland
+    filt.freq -= strength*moduland
 
     -- give some headroom 
     return $ 0.1*output
@@ -140,12 +141,12 @@ instance IsSynth AnySynth where
 
 
 -- Kill any remaining notes, wait for them to ring out
-runSynthANiente :: (Source s, IsVoice s) => Seconds -> State (Synth s) [Pulse]
+runSynthANiente :: (Source v, IsVoice v, Transformer f, FreqField f) => Seconds -> State (Synth v f) [Pulse]
 runSynthANiente dt = do
   noteOffAllSynth
   iterateStateUntil (uses voices null) (step dt)
 
-runSynthSteps :: (Source s, IsVoice s) => Int -> Seconds -> State (Synth s) [Pulse]
+runSynthSteps :: (Source s, IsVoice s, Transformer f, FreqField f) => Int -> Seconds -> State (Synth s f) [Pulse]
 runSynthSteps n dt = iterateState n (step dt)
 
 -- Chunks the timestep into at most 1 second long chunks
@@ -153,7 +154,7 @@ runSynthSteps n dt = iterateState n (step dt)
 --    as they're only culled once per call to runSynthSteps
 --    and leaving them in the EnvDone state will waste time calculating zeros
 -- #TODO could the EnvDone state be signalled somehow to automate the culling?
-runSynth :: (Source s, IsVoice s) => Seconds -> State (Synth s) [Pulse]
+runSynth :: (Source s, IsVoice s, Transformer f, FreqField f) => Seconds -> State (Synth s f) [Pulse]
 runSynth dt | dt < (1.0/sampleRate) = return []
             | dt > 1.0 = do 
                 firstSec <- runSynthSteps (floor sampleRate) (1.0/sampleRate)
@@ -165,15 +166,15 @@ runSynth dt | dt < (1.0/sampleRate) = return []
 
 
 noteOnSynth :: (Source s, FreqField s, IsVoice s) => 
-                    NoteNumber -> Volume -> State (Synth s) ()
+                    NoteNumber -> Volume -> State (Synth s f) ()
 noteOnSynth note vel = do
   newVoice <- initialise note vel <$> use voiceTemplate
   voices %= Map.insertWith (flip const) note newVoice
 
-noteOffSynth :: IsVoice s => NoteNumber -> State (Synth s) ()
+noteOffSynth :: IsVoice s => NoteNumber -> State (Synth s f) ()
 noteOffSynth note = voices %= Map.adjust release note
 
-noteOffAllSynth :: IsVoice s => State (Synth s) ()
+noteOffAllSynth :: IsVoice s => State (Synth s f) ()
 noteOffAllSynth = voices.each %= release
 
 
@@ -186,10 +187,12 @@ simpleSynth osc = AnySynth $ defaultSynth & voiceTemplate.source .~ osc
 defaultSynth = Synth {
   _synthVoices = Map.empty, 
   -- _synthFilt = bandPass (1/sampleRate) & param .~ (220, 880),--param is (low, high)
-  -- _synthFilt = centeredBandPass (1/sampleRate) & param .~ (440, 220),--param is (center, width)
-  -- _synthFilt = lowPass (1/sampleRate) & param . freq .~ 440,--param is cutoff frequency
+  -- _synthFilt = centeredBandPass (1/sampleRate) & freq .~ 440
+  --                                                 & bandwidth .~ 220
+  -- _synthFilt = lowPass (1/sampleRate) & freq .~ 440,--param is cutoff frequency
   -- _synthFilt = cubicFilter & param .~ 0.8,--param is clip limit
-  _synthFilt = clipper,--param is clip limit
+  -- _synthFilt = centeredBandPass (1/sampleRate) & freq .~ 800,--param is clip limit
+  _synthFilt = lowPass (1/sampleRate) & freq .~ 44000,--param is cutoff frequency
   -- _synthFilt = hashtagNoFilter (0,0),
   _synthLfo = lfo1s & freq .~ 0.4,
   _synthLfoStrength = 0.2, -- 400 * 10,
