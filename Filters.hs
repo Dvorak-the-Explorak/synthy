@@ -187,11 +187,6 @@ centeredBandPass2 dt = seqKernelsWith CBPStore (lowPass2 dt) (highPass2 dt)
 
 lowPass :: Seconds -> Filter FreqParam 
 lowPass = kernelToFilter . lowPass2
--- lowPass dt = Filter {
---   _filterStorage = 0,
---   _filterParam = FreqParam 0,
---   _filterRun = lowPassFunc dt
--- }
 
 lowPass2 :: Seconds -> Kernel (WithStorage Pulse FreqParam) Pulse Pulse
 lowPass2 dt = Kernel s go
@@ -202,11 +197,6 @@ lowPass2 dt = Kernel s go
 
 highPass :: Seconds -> Filter FreqParam
 highPass = kernelToFilter . highPass2
--- highPass dt = Filter {
---   _filterStorage = (0,0),
---   _filterParam = FreqParam 0,
---   _filterRun = highPassFunc dt
--- }
 
 highPass2 :: Seconds -> Kernel (WithStorage (Pulse,Pulse) FreqParam) Pulse Pulse
 highPass2 dt = Kernel s go
@@ -224,7 +214,6 @@ combFilter = Filter {
   _filterRun = combFilterFunc
 }
 
-
 combFilter2 = Kernel s go 
   where
     s = CombStore ([], 0.8, 10)
@@ -237,7 +226,6 @@ clipper = Filter () (1) clipperFunc
 pureFilter :: (Pulse -> Pulse) -> Filter ()
 pureFilter f = Filter () () (const $ return . f)
 
-
 -- cubicFilter :: Filter ()
 -- cubicFilter = pureFilter (**3)
 cubicFilter :: Filter Float
@@ -249,22 +237,17 @@ gainFilter = Filter () 1 (\gain -> return . (*gain))
 -- ================================
 
 hashtagNoFilterFunc :: FilterFunc () a
--- hashtagNoFilterFunc _ = return 
 hashtagNoFilterFunc = const return 
 
 rcFromCutoff :: Hz -> Float
 rcFromCutoff f = 1/(2*pi*f)
 
 lowPassFunc :: Seconds -> FilterFunc Pulse FreqParam
-lowPassFunc dt = (\(FreqParam cutoff) pulse -> state $ \prev -> 
-  let 
+lowPassFunc dt = \(FreqParam cutoff) pulse -> state $ \prev -> let 
     rc = 1/(2*pi*cutoff)
     alpha = dt / (rc + dt)
     next = alpha*pulse +  (1-alpha) * prev
   in (next, next)
-  )
-
-
 
 --                         (--------------- Kernel go function -------------) 
 lowPassFunc2 :: Seconds -> Pulse -> State (WithStorage Pulse FreqParam) Pulse

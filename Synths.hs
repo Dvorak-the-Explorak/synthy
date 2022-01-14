@@ -93,8 +93,9 @@ instance (Source s, IsVoice s) => Steppable Seconds Pulse (Synth s) where
     -- -- voices %= map (osc.waveIndex .~ (moduland+1)/2)
     -- voices.each.osc.waveIndex .= (moduland+1)/2
 
-    -- -- run the filter to get the output
+    -- -- -- run the filter to get the output
     output <- step pulse .@ filt
+    -- let output = pulse
 
     -- unmodulate the filter cutoff
     filt.param -= strength*moduland
@@ -178,9 +179,8 @@ noteOffAllSynth = voices.each %= release
 
 -- ==============================================================================
 
--- simpleSynth :: SimpleOsc -> Synth (Voice of some sort)
--- simpleSynth :: (IsVoice v, Source v) => SimpleOsc -> Synth v
-simpleSynth osc = defaultSynth & voiceTemplate.source .~ osc
+simpleSynth :: SimpleOsc -> AnySynth
+simpleSynth osc = AnySynth $ defaultSynth & voiceTemplate.source .~ osc
 
 
 
@@ -190,7 +190,8 @@ defaultSynth = Synth {
   -- _synthFilt = bandPass (1/sampleRate) & param .~ (220, 880),--param is (low, high)
   -- _synthFilt = centeredBandPass (1/sampleRate) & param .~ (440, 220),--param is (center, width)
   -- _synthFilt = lowPass (1/sampleRate) & param . freq .~ 440,--param is cutoff frequency
-  _synthFilt = cubicFilter & param .~ 0.8,--param is clip limit
+  -- _synthFilt = cubicFilter & param .~ 0.8,--param is clip limit
+  _synthFilt = clipper,--param is clip limit
   -- _synthFilt = hashtagNoFilter (0,0),
   _synthLfo = lfo1s & freq .~ 0.4,
   _synthLfoStrength = 0.2, -- 400 * 10,

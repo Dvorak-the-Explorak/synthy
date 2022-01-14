@@ -168,6 +168,9 @@ synthesiseMidiTrack ((ticks, message):messages) = do
     -- NoteOn with 0 velocity counts as noteOff
     NoteOn ch key 0 -> noteOffSynth key 
     NoteOn ch key vel -> noteOnSynth key $ (fromIntegral vel) / 127.0
+    TrackName str -> return ()  
+    Copyright str -> return ()  
+    Lyrics str -> return ()   
     x -> notImplemented x 
 
     -- KeyPressure ch key pressure -> return ()
@@ -177,22 +180,18 @@ synthesiseMidiTrack ((ticks, message):messages) = do
     -- PitchWheel ch pitch -> return ()
     -- SequenceNumber n -> return ()
     -- Text str -> return ()   
-    -- Copyright str -> return ()  
-    -- TrackName str -> return ()  
     -- InstrumentName str -> return ()   
-    -- Lyrics str -> return ()   
     -- Marker str -> return ()   
     -- CuePoint str -> return ()   
     -- ChannelPrefix ch -> return ()   
     -- ProgramName str -> return ()  
     -- DeviceName str -> return ()   
-    -- TrackEnd -> return () 
     -- TempoChange tempo -> return ()
-    -- -- SMPTEOffset !Int !Int !Int !Int !Int   
-    -- -- TimeSignature !Int !Int !Int !Int  
-    -- -- KeySignature !Int !Int   
-    -- -- Reserved !Int !ByteString  
-    -- -- Sysex !Int !ByteString
+    -- SMPTEOffset !Int !Int !Int !Int !Int   
+    -- TimeSignature !Int !Int !Int !Int  
+    -- KeySignature !Int !Int   
+    -- Reserved !Int !ByteString  
+    -- Sysex !Int !ByteString
     -- _ -> return ()
 
   -- do the rest of the messages

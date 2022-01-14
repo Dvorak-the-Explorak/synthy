@@ -80,36 +80,31 @@ outputFile = "output.bin"
 
 main = do
 
-  playOnabots
-  -- let midiFile = "c_major.mid"
-  -- -- let midiFile = "onabots_2.mid"
-  -- putStrLn $ printf $ "Playing " ++ midiFile
+  let midiFile = "c_major.mid"
 
-  -- play midiFile
+  -- playOnabots
+  let midiFile = "c_major.mid"
+  -- let midiFile = "onabots_2.mid"
+  putStrLn $ printf $ "Playing " ++ midiFile
+
+  play midiFile
   fail "done"
 
 
 
-  -- wavFile <- (Wav.importFile "ESW_FM_Grizzly.wav") :: IO ( Either String (Audio Int16))
-  -- wavFile <- getBytes 58 Wav.parseWav $ B.readFile "ESW_FM_Grizzly.wav"
-  -- raw_wav <- return $ BG.runGet Wav.parseWav $ B.readFile "ESW_FM_Grizzly.wav"
-  -- wav <- decodeWaveFile "ESW_FM_Grizzly.wav"
   wav <- getWAVEFile "ESW_FM_Grizzly.wav"
-  -- -- putStrLn $ show $ map (sampleToDouble . head) $ waveSamples wav
   putStrLn $ waveFileDescription wav
-  -- putStrLn "Hello, world"
 
   let samples = samplesFromWave wav
   
-  g <- newStdGen
-  -- let synth = defaultSynth & voiceTemplate.source .~ (noisy g 0.4 sawOsc)
-  let synth = defaultSynth
-  -- let synth = defaultSynth
+  let synth = simpleSynth sawOsc
 
   let midiFile = "c_major.mid"
   putStrLn $ printf $ "Playing " ++ midiFile
   -- playWithSynth (defaultSynth & voiceTemplate.source .~ wtOsc) midiFile
-  playWithSynth synth midiFile
+  pulses <- synthesiseMidi (const synth) <$> getMidi midiFile
+  saveAndPlaySound pulses
+
   putStrLn $ "made " ++ outputFile
 
 
@@ -154,38 +149,19 @@ playOnabots = do
   putStrLn $ show $ length $ tracks midi
 
 
-  let instruments = Map.fromList  [ (102, AnySynth $ simpleSynth sawOsc)
-                              , (80, AnySynth $ simpleSynth sineOsc)
-                              , (81, AnySynth $ simpleSynth sawOsc)
-                              , (83, AnySynth $ simpleSynth squareOsc)
-                              , (16, AnySynth $ simpleSynth sineOsc)
-                              , (33, AnySynth $ simpleSynth squareOsc)
-                              , (0, AnySynth $ simpleSynth sawOsc)
+  let instruments = Map.fromList  [ (102, simpleSynth sawOsc)
+                              , (80, simpleSynth sineOsc)
+                              , (81, simpleSynth sawOsc)
+                              , (83, simpleSynth squareOsc)
+                              , (16, simpleSynth sineOsc)
+                              , (33, simpleSynth squareOsc)
+                              , (0, simpleSynth sawOsc)
                               ]
 
-
-  -- let trackPulses = zipWith (\ osc track -> performMidiWithOscillator osc track) 
-  --                     [sawOsc, sineOsc, sawOsc, squareOsc, sineOsc, squareOsc, squareOsc] 
-  --                     (tracks midi)
-
-  let getSynth n = Map.findWithDefault (AnySynth $ simpleSynth sineOsc) n instruments
+  let getSynth n = Map.findWithDefault (simpleSynth sineOsc) n instruments
   let pulses = synthesiseMidi getSynth midi 
 
-  -- let v1 = performMidiSaw $ map timeScale $ (tracks midi) !! 1 
-  -- let v2 = performMidiSine $ map timeScale $ (tracks midi) !! 2 
-  -- let v3 = performMidiSaw $ map timeScale $ (tracks midi) !! 3
-  -- let v4 = performMidiSquare $ map timeScale $ (tracks midi) !! 4
-  -- let v5 = performMidiSine $ map timeScale $ (tracks midi) !! 5
-  -- let v6 = performMidiSquare $ map timeScale $ (tracks midi) !! 6 
-  -- let v7 = performMidiSquare $ map timeScale $ (tracks midi) !! 7
-  -- let outputs = [v1, v2, v3 ,v4, v5, v6, v7]
-  -- let pulses = map (hardClip . sum) $ transpose trackPulses
-
   saveAndPlaySound pulses
-
-
-playOld :: FilePath -> IO ()
-playOld inputFile = playWithSynth defaultSynth inputFile
 
 play :: FilePath -> IO ()
 play inputFile = do
