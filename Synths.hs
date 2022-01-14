@@ -22,7 +22,7 @@ import qualified Data.Map.Strict as Map
 
 import Codec.Midi
 
-import General (Seconds, Pulse, sampleRate, Hz)
+import General (Seconds, Pulse, sampleRate, Hz, Volume)
 import Voices
 -- import Voices (Voice(..), IsVoice, initialiseVoice, defaultVoice, 
 --           stepVoices, noteOnVoicesWith, noteOffVoices, releaseVoice,
@@ -112,9 +112,9 @@ runSynth dt | dt < (1.0/sampleRate) = return []
 
 
 noteOnSynth :: (Source s, FreqField s, IsVoice s) => 
-                    NoteNumber -> State (Synth s) ()
-noteOnSynth note = do
-  newVoice <- initialise note <$> use voiceTemplate
+                    NoteNumber -> Volume -> State (Synth s) ()
+noteOnSynth note vel = do
+  newVoice <- initialise note vel <$> use voiceTemplate
   voices %= Map.insertWith (flip const) note newVoice
 
 noteOffSynth :: IsVoice s => NoteNumber -> State (Synth s) ()

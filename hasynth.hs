@@ -77,7 +77,8 @@ outputFile = "output.bin"
 
 main = do
   -- playOnabots
-  let midiFile = "c_major.mid"
+  -- let midiFile = "c_major.mid"
+  let midiFile = "onabots_2.mid"
   putStrLn $ printf $ "Playing " ++ midiFile
   putStrLn "samples per tick:"
 

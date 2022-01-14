@@ -45,19 +45,20 @@ class IsVoice v where
   restart :: v -> v
   release :: v -> v
   finished :: v -> Bool
-  -- set the internal state of this voice to the appropriate values for a given note
+  -- set the internal state of this voice to the appropriate values for a given note / velocity
   --  (eg. set oscillator frequencies)
-  initialise :: NoteNumber -> v -> v
+  initialise :: NoteNumber -> Volume -> v -> v
 
 
-data Voice s f = Voice {
-  _voiceSource :: s, 
-  _voiceVenv :: VolEnv,
-  _voiceFiltEnv :: VolEnv,
-  _voiceFilt :: f,
-  -- How to change the filter according to the output of the filter envelope
-  _voiceFiltModulate :: (Volume -> f -> f)
-}
+data Voice s f = Voice 
+  { _voiceSource :: s
+  , _voiceVenv :: VolEnv
+  , _voiceFiltEnv :: VolEnv
+  , _voiceFilt :: f
+  , _voiceVelocity :: Volume
+    -- How to change the filter according to the output of the filter envelope
+  , _voiceFiltModulate :: (Volume -> f -> f)
+  }
 
 
 -- calls the lens for _voiceFiltEnv filtEnv 
@@ -79,12 +80,19 @@ instance (Source s, Transformer f)
 
     -- run the oscillator and the volume envelope
     pulse <-  step dt .@ source
-    vol <- step dt .@ venv
+    vol <- stepVolumeEnv dt
 
     -- run the filter
     output <- step (pulse*vol) .@ filt
 
     return $ output
+
+stepVolumeEnv :: Seconds -> State (Voice s f) Volume
+stepVolumeEnv dt = do
+  envVolume <- step dt .@ venv
+  scale <- use velocity
+
+  return $ scale*envVolume
 
   -- run the filter envelope and update the filter frequency
 stepFilterEnv :: Seconds -> State (Voice s f) ()
@@ -103,8 +111,9 @@ instance WaveIndexField s => WaveIndexField (Voice s f) where
 -- =======================================================================
 
 
-initialiseVoice :: FreqField s => NoteNumber -> Voice s f -> Voice s f
-initialiseVoice noteNum v = v & source . freq .~ hzFromNoteNumber noteNum
+initialiseVoice :: FreqField s => NoteNumber -> Volume -> Voice s f -> Voice s f
+initialiseVoice noteNum vol v = v & source . freq .~ hzFromNoteNumber noteNum
+                                  & velocity .~ vol
 
 voiceFinished :: Voice s f -> Bool
 voiceFinished v = (v ^. venv . currentState) == EnvDone
@@ -133,6 +142,7 @@ makeVoice source filt = Voice
     , _releaseSlope=1, _currentState=EnvAttack, _volume=0
     }
   , _voiceFilt = filt
+  , _voiceVelocity = 1
   , _voiceFiltModulate = (\ v f -> f & freq .~ 800 + 16000*v)
   -- , _voiceFiltModulate = (\ v f -> f)
   }

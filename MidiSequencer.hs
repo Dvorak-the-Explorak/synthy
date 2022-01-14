@@ -86,8 +86,9 @@ synthesiseMidiTrack ((ticks, message):messages) = do
   -- handle the effect of the message
   case message of
     NoteOff ch key vel -> noteOffSynth key 
+    -- NoteOn with 0 velocity counts as noteOff
     NoteOn ch key 0 -> noteOffSynth key 
-    NoteOn ch key vel -> noteOnSynth key
+    NoteOn ch key vel -> noteOnSynth key $ (fromIntegral vel) / 127.0
 
     KeyPressure ch key pressure -> return ()
     ControlChange ch contNum contVal -> return ()
