@@ -82,6 +82,7 @@ main = do
 
   let midiFile = "c_major.mid"
   -- let midiFile = "onabots_2.mid"
+  -- printMidi midiFile
   putStrLn $ printf $ "Playing " ++ midiFile
   play midiFile
   fail "done"

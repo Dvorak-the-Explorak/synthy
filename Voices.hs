@@ -128,8 +128,6 @@ restartVoice = (venv %~ restartEnv) . (filtEnv %~ restartEnv)
 -- ===============================================================================
 
 
-
-
 makeVoice :: FreqField f => s -> f -> Voice s f
 makeVoice source filt = Voice 
   { _voiceSource = source
@@ -154,3 +152,13 @@ defaultVoice = makeVoice source filt
   where
     source = sawOsc
     filt = (lowPass (1/sampleRate)) & freq .~ 400
+
+
+-- =================================================================================
+
+instance IsVoice OneshotOsc where
+  restart (OneshotOsc (Kernel (OneshotOscStore (pulses, rate, _)) go)) = OneshotOsc $ Kernel (OneshotOscStore (pulses, rate, 0)) go
+  release (OneshotOsc (Kernel (OneshotOscStore (pulses, rate, _)) go)) = OneshotOsc $ Kernel (OneshotOscStore (pulses, rate, (rate * fromIntegral (length pulses)))) go
+  finished (OneshotOsc (Kernel (OneshotOscStore (pulses, rate, t)) go)) = t > (rate * fromIntegral (length pulses))
+  initialise _ vol (OneshotOsc (Kernel (OneshotOscStore (pulses, rate, t)) go)) = (OneshotOsc $ Kernel (OneshotOscStore ((map (*vol) pulses), rate, t)) go)
+

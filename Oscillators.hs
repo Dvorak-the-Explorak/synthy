@@ -71,7 +71,7 @@ instance WaveIndexField WavetableOscStore where
 
 
 newtype OneshotOscStore = OneshotOscStore ([Pulse], Seconds, Seconds)
-type OneshotOsc = Kernel OneshotOscStore Seconds Pulse
+newtype OneshotOsc = OneshotOsc (Kernel OneshotOscStore Seconds Pulse)
 
 
 -- ======================================================================
@@ -136,10 +136,12 @@ waveformFromSamples vals = \x -> let
   in (vals !! i) + frac * ((vals !! next) - (vals !! i))
 
 makeOneshot :: [Pulse] -> Seconds -> OneshotOsc
-makeOneshot pulses sampleRate = Kernel s go
+makeOneshot pulses sampleRate = OneshotOsc $ Kernel s go
   where
     s = OneshotOscStore (pulses, sampleRate, 0)
     go = stepOneshotOsc
+
+
 
 -- ==========================================================
 
