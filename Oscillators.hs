@@ -27,7 +27,7 @@ import Control.Monad.State
 import Control.Monad.Reader
 import Control.Lens
 import System.Random
-import Data.List.Extra ((!?))
+-- import Data.List.Extra ((!?))
 import GHC.Generics
 
 import General
@@ -38,8 +38,8 @@ import Steppable
 import Parameterised
 
 
--- import qualified Data.Vector as V
--- import Data.Vector (Vector)
+import qualified Data.Vector as V
+import Data.Vector (Vector, (!))
 
 import Debug.Trace
 
@@ -76,7 +76,7 @@ instance WaveIndexField WavetableOscStore where
 
 
 
-newtype OneshotOscStore = OneshotOscStore ([Pulse], Seconds, Seconds)
+newtype OneshotOscStore = OneshotOscStore (Vector Pulse, Seconds, Seconds)
   deriving Generic
 instance Wrapped OneshotOscStore
 newtype OneshotOsc = OneshotOsc (Kernel OneshotOscStore Seconds Pulse)
@@ -114,10 +114,12 @@ stepOneshotOsc = \dt -> do
   OneshotOscStore (pulses, rate, t) <- get
   let t' = t + dt
   let index = floor $ t' * rate
-  let output = case pulses !? index of
-            Nothing -> 0.0
-            -- Just x -> if index > 15000 then trace (show (t', index, x)) x else x  
-            Just x -> x  
+  let output = if index >= V.length pulses 
+                then 0.0
+                else pulses ! index
+  -- let output = case pulses !? index of
+  --           Nothing -> 0.0
+  --           Just x -> x  
   put $ OneshotOscStore (pulses, rate, t')
   return output
 
@@ -125,11 +127,11 @@ stepOneshotOsc = \dt -> do
 -- for IsVoice instance
 oneshotRestart osc = osc & _Wrapped' . storage . _Wrapped' . _3 .~ 0
 oneshotRelease (OneshotOsc (Kernel (OneshotOscStore (pulses, rate, _)) go)) = 
-                OneshotOsc $ Kernel (OneshotOscStore (pulses, rate, (fromIntegral $ length pulses) / rate)) go
+                OneshotOsc $ Kernel (OneshotOscStore (pulses, rate, (fromIntegral $ V.length pulses) / rate)) go
 oneshotFinished  (OneshotOsc (Kernel (OneshotOscStore (pulses, rate, t)) go)) = 
-                    t > (fromIntegral $ length pulses) / rate
+                    t > (fromIntegral $ V.length pulses) / rate
 oneshotInitialise _ vol (OneshotOsc (Kernel (OneshotOscStore (pulses, rate, t)) go)) = 
-                   (OneshotOsc $ Kernel (OneshotOscStore ((map (*vol) pulses), rate, t)) go)
+                   (OneshotOsc $ Kernel (OneshotOscStore ((V.map (*vol) pulses), rate, t)) go)
 
 -- ============================================================
 
@@ -158,7 +160,7 @@ waveformFromSamples vals = \x -> let
 makeOneshot :: [Pulse] -> Seconds -> OneshotOsc
 makeOneshot pulses sampleRate = OneshotOsc $ Kernel s go
   where
-    s = OneshotOscStore (pulses, sampleRate, 0)
+    s = OneshotOscStore (V.fromList pulses, sampleRate, 0)
     go = stepOneshotOsc
 
 instance Steppable Seconds Pulse OneshotOsc where
