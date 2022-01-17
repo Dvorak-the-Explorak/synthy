@@ -154,11 +154,30 @@ defaultVoice = makeVoice source filt
     filt = (lowPass (1/sampleRate)) & freq .~ 400
 
 
+
+
 -- =================================================================================
 
 instance IsVoice OneshotOsc where
-  restart (OneshotOsc (Kernel (OneshotOscStore (pulses, rate, _)) go)) = OneshotOsc $ Kernel (OneshotOscStore (pulses, rate, 0)) go
-  release (OneshotOsc (Kernel (OneshotOscStore (pulses, rate, _)) go)) = OneshotOsc $ Kernel (OneshotOscStore (pulses, rate, (rate * fromIntegral (length pulses)))) go
-  finished (OneshotOsc (Kernel (OneshotOscStore (pulses, rate, t)) go)) = t > (rate * fromIntegral (length pulses))
-  initialise _ vol (OneshotOsc (Kernel (OneshotOscStore (pulses, rate, t)) go)) = (OneshotOsc $ Kernel (OneshotOscStore ((map (*vol) pulses), rate, t)) go)
+  -- restart (OneshotOsc (Kernel (OneshotOscStore (pulses, rate, _)) go)) = 
+  --          OneshotOsc $ Kernel (OneshotOscStore (pulses, rate, 0)) go
+  restart osc = osc & _Wrapped' . storage . _Wrapped' . _3 .~ 0
+  release (OneshotOsc (Kernel (OneshotOscStore (pulses, rate, _)) go)) = 
+           OneshotOsc $ Kernel (OneshotOscStore (pulses, rate, (fromIntegral $ length pulses) / rate)) go
+  finished (OneshotOsc (Kernel (OneshotOscStore (pulses, rate, t)) go)) = 
+              t > (fromIntegral $ length pulses) / rate
+  initialise _ vol (OneshotOsc (Kernel (OneshotOscStore (pulses, rate, t)) go)) = 
+                   (OneshotOsc $ Kernel (OneshotOscStore ((map (*vol) pulses), rate, t)) go)
 
+
+-- instance IsVoice OneshotOsc where
+--   -- restart (OneshotOsc (Kernel (OneshotOscStore (pulses, sampleRate, _)) go)) = (OneshotOsc (Kernel (OneshotOscStore (pulses, sampleRate, _)) go))
+--   restart osc = osc & _Wrapped' . store . _Wrapped' . _3 .~ 0
+--   -- release (OneshotOsc (Kernel (OneshotOscStore (pulses, sampleRate, _)) go)) = 
+--   --         (OneshotOsc (Kernel (OneshotOscStore (pulses, sampleRate, (fromIntegral $ length pulses) * sampleRate)) go))
+--   release = id
+--   finished (OneshotOsc (Kernel (OneshotOscStore (pulses, sampleRate, t)) go)) = 
+--           t >= (fromIntegral $ length pulses) * sampleRate
+--   -- set the internal state of this voice to the appropriate values for a given note / velocity
+--   --  (eg. set oscillator frequencies)
+--   initialise noteNum vel osc = osc & _Wrapped . store . _Wrapped' . _1 %~ (*vel)

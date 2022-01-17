@@ -6,6 +6,7 @@
            , TypeSynonymInstances
            , BangPatterns
            , ExistentialQuantification
+           , DeriveGeneric
   #-}
 
 module Oscillators where
@@ -27,6 +28,7 @@ import Control.Monad.Reader
 import Control.Lens
 import System.Random
 import Data.List.Extra ((!?))
+import GHC.Generics
 
 import General
 import Data.Fixed (mod')
@@ -34,6 +36,10 @@ import Wavetable (Wavetable)
 import Helpers
 import Steppable
 import Parameterised
+
+
+-- import qualified Data.Vector as V
+-- import Data.Vector (Vector)
 
 import Debug.Trace
 
@@ -71,7 +77,11 @@ instance WaveIndexField WavetableOscStore where
 
 
 newtype OneshotOscStore = OneshotOscStore ([Pulse], Seconds, Seconds)
+  deriving Generic
+instance Wrapped OneshotOscStore
 newtype OneshotOsc = OneshotOsc (Kernel OneshotOscStore Seconds Pulse)
+  deriving Generic
+instance Wrapped OneshotOsc
 
 
 -- ======================================================================
@@ -103,9 +113,10 @@ stepOneshotOsc :: Seconds -> State OneshotOscStore Pulse
 stepOneshotOsc = \dt -> do
   OneshotOscStore (pulses, rate, t) <- get
   let t' = t + dt
-  let index = floor $ t' / rate
+  let index = floor $ t' * rate
   let output = case pulses !? index of
             Nothing -> 0.0
+            -- Just x -> if index > 15000 then trace (show (t', index, x)) x else x  
             Just x -> x  
   put $ OneshotOscStore (pulses, rate, t')
   return output
@@ -140,6 +151,9 @@ makeOneshot pulses sampleRate = OneshotOsc $ Kernel s go
   where
     s = OneshotOscStore (pulses, sampleRate, 0)
     go = stepOneshotOsc
+
+instance Steppable Seconds Pulse OneshotOsc where
+  step dt = step dt .@ _Wrapped'
 
 
 

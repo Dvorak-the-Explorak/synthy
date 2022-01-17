@@ -59,7 +59,7 @@ data Synth v f = Synth {
   _synthVoiceTemplate :: v
 }
 
-data AnySynth = forall v f. (Source v, FreqField v, IsVoice v, Transformer f, FreqField f) => 
+data AnySynth = forall v f. (Source v, IsVoice v, Transformer f, FreqField f) => 
                             AnySynth (Synth v f)
 
 makeFields ''Synth
@@ -165,8 +165,8 @@ runSynth dt | dt < (1.0/sampleRate) = return []
 
 
 
-noteOnSynth :: (Source s, FreqField s, IsVoice s) => 
-                    NoteNumber -> Volume -> State (Synth s f) ()
+noteOnSynth :: (Source v, IsVoice v) => 
+                    NoteNumber -> Volume -> State (Synth v f) ()
 noteOnSynth note vel = do
   newVoice <- initialise note vel <$> use voiceTemplate
   voices %= Map.insertWith (flip const) note newVoice

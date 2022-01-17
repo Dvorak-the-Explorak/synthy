@@ -81,23 +81,34 @@ outputFile = "output.bin"
 main = do
 
   let midiFile = "c_major.mid"
-  -- let midiFile = "onabots_2.mid"
-  -- printMidi midiFile
+  wav <- getWAVEFile "bass_drum.wav"
+
+  let bassDrumSample = makeOneshot (samplesFromWave wav) sampleRate
+  let synth = AnySynth $ defaultSynth 
+                { _synthVoices = Map.empty
+                , _synthVoiceTemplate = bassDrumSample 
+                }
+
+
+  midi <- getMidi midiFile
+  let pulses = synthesiseMidi (const synth) midi
   putStrLn $ printf $ "Playing " ++ midiFile
-  play midiFile
-  fail "done"
+  saveAndPlaySound pulses
 
-
+oldMain = do
 
   wav <- getWAVEFile "ESW_FM_Grizzly.wav"
   putStrLn $ waveFileDescription wav
 
   let samples = samplesFromWave wav
   
-  let synth = simpleSynth sawOsc
+
+  wav <- getWAVEFile "ESW_FM_Grizzly.wav"
 
   let midiFile = "c_major.mid"
   putStrLn $ printf $ "Playing " ++ midiFile
+
+  let synth = simpleSynth sawOsc
 
   pulses <- synthesiseMidi (const synth) <$> getMidi midiFile
   saveAndPlaySound pulses
