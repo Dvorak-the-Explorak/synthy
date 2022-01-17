@@ -132,8 +132,8 @@ makeVoice :: FreqField f => s -> f -> Voice s f
 makeVoice source filt = Voice 
   { _voiceSource = source
   , _voiceVenv = VolEnv
-    { _attackSlope=20, _decaySlope=2, _sustainLevel=0.7
-    , _releaseSlope=2, _currentState=EnvAttack, _volume=0
+    { _attackSlope=20, _decaySlope=5, _sustainLevel=0.5
+    , _releaseSlope=5, _currentState=EnvAttack, _volume=0
     }
   , _voiceFiltEnv = VolEnv
     { _attackSlope=20, _decaySlope=8, _sustainLevel=0.01
@@ -157,6 +157,27 @@ defaultVoice = makeVoice source filt
 
 
 -- =================================================================================
+
+-- just wraps OneshotOsc samples with a different sample for each note
+data SampledVoice = SampledVoice 
+  { sampleFromNote :: NoteNumber -> [Pulse]
+  , sample :: OneshotOsc
+  }
+
+currentSample :: Lens' SampledVoice OneshotOsc
+currentSample = lens get set
+  where
+    get (SampledVoice _ sample) = sample
+    set (SampledVoice get _) x = SampledVoice get x
+
+instance IsVoice SampledVoice where
+  restart (SampledVoice get osc) = SampledVoice get $ restart osc
+  release (SampledVoice get osc) = SampledVoice get $ release osc
+  finished (SampledVoice get osc) = finished osc
+  initialise noteNum vel (SampledVoice get osc) = SampledVoice get $ makeOneshot (map (*vel) $ get noteNum) sampleRate
+instance Steppable Seconds Pulse SampledVoice where
+  step dt = step dt .@ currentSample
+
 
 instance IsVoice OneshotOsc where
   -- -- restart (OneshotOsc (Kernel (OneshotOscStore (pulses, rate, _)) go)) = 

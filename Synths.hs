@@ -14,7 +14,6 @@ module Synths where
 import Control.Monad.State
 import Data.Maybe (catMaybes)
 import Control.Lens
-import Debug.Trace
 import Data.List (sum)
 
 import Data.Map (Map)
@@ -35,6 +34,9 @@ import Envelopes (VolEnv(..), EnvSegment(..), currentState)
 import Oscillators
 import Steppable
 import Parameterised
+
+
+import Debug.Trace
 
 
 -- #TODO can this be neater so I don't need all this shit???
@@ -126,9 +128,11 @@ instance IsSynth AnySynth where
 
 
 
-  _noteOnSynth note vel = state $ \(AnySynth synth) -> let
-      (output, synth') = runState (noteOnSynth note vel) synth
-    in (output, AnySynth synth')
+  -- _noteOnSynth note vel = trace ("anysynth: " ++ show (note, vel)) $ state $ \(AnySynth synth) -> let
+  --     (output, synth') = runState (noteOnSynth note vel) synth
+  --   in (output, AnySynth synth')
+
+  _noteOnSynth note vel = state $ \(AnySynth synth) -> ((), AnySynth $ execState (noteOnSynth note vel) synth)
 
   _noteOffSynth note = state $ \(AnySynth synth) -> let
       (output, synth') = runState (noteOffSynth note) synth
@@ -169,7 +173,8 @@ noteOnSynth :: (Source v, IsVoice v) =>
                     NoteNumber -> Volume -> State (Synth v f) ()
 noteOnSynth note vel = do
   newVoice <- initialise note vel <$> use voiceTemplate
-  voices %= Map.insertWith (flip const) note newVoice
+  -- restart existing voice
+  voices %= Map.insertWith (\ new old -> restart old) note newVoice
 
 noteOffSynth :: IsVoice s => NoteNumber -> State (Synth s f) ()
 noteOffSynth note = voices %= Map.adjust release note

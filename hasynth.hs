@@ -78,17 +78,26 @@ outputFile = "output.bin"
 -- =====================================================
 -- =====================================================
 
-main = do
+main = playOnabots
+
+
+test = do
 
   let midiFile = "c_major.mid"
-  wav <- getWAVEFile "bass_drum.wav"
 
-  let bassDrumSample = makeOneshot (samplesFromWave wav) sampleRate
+  -- wav <- getWAVEFile "bass_drum.wav"
+  -- wav <- getWAVEFile "hi_hat.wav"
+
+  nope <- samplesFromWave <$> getWAVEFile "nope.wav"
+  samples <- map samplesFromWave <$> mapM getWAVEFile ["bass_drum.wav", "snare.wav", "hi_hat.wav", "low_tom.wav", "low-mid_tom.wav"]
+  let sampleMapping = Map.fromList $ zip [36, 38, 42, 45, 47] samples
+
+  let percVoice = SampledVoice (\n -> Map.findWithDefault nope n sampleMapping) (makeOneshot nope sampleRate)
+
   let synth = AnySynth $ defaultSynth 
                 { _synthVoices = Map.empty
-                , _synthVoiceTemplate = bassDrumSample 
+                , _synthVoiceTemplate = percVoice 
                 }
-
 
   midi <- getMidi midiFile
   let pulses = synthesiseMidi (const synth) midi
@@ -170,14 +179,26 @@ playOnabots = do
   putStrLn $ show $ length $ tracks midi
 
 
-  let instruments = Map.fromList  [ (102, simpleSynth sawOsc)
-                              , (80, simpleSynth sineOsc)
-                              , (81, simpleSynth sawOsc)
-                              , (83, simpleSynth squareOsc)
-                              , (16, simpleSynth sineOsc)
-                              , (33, simpleSynth squareOsc)
-                              , (0, simpleSynth sawOsc)
-                              ]
+  -- Drum voice
+  nope <- samplesFromWave <$> getWAVEFile "nope.wav"
+  samples <- map samplesFromWave <$> mapM getWAVEFile ["bass_drum.wav", "snare.wav", "low_floor_tom.wav", "hi_hat.wav", "high_floor_tom.wav", "low_tom.wav", "low-mid_tom.wav", "crash.wav", "china.wav", "splash.wav"]
+  let sampleMapping = Map.fromList $ zip [36, 38, 41, 42, 43, 45, 47, 49, 52, 55] samples
+
+  let drumVoice = SampledVoice (\n -> Map.findWithDefault nope n sampleMapping) (makeOneshot nope sampleRate)
+  let drumSynth = AnySynth $ defaultSynth 
+                { _synthVoices = Map.empty
+                , _synthVoiceTemplate = drumVoice 
+                }
+
+
+  let instruments = Map.fromList  [ (103, simpleSynth sawOsc)
+                                  , (80, simpleSynth sineOsc)
+                                  , (81, simpleSynth sawOsc)
+                                  , (83, simpleSynth squareOsc)
+                                  , (16, simpleSynth sineOsc)
+                                  , (33, simpleSynth squareOsc)
+                                  , (0, drumSynth)
+                                  ]
 
   let getSynth n = Map.findWithDefault (simpleSynth sineOsc) n instruments
   let pulses = synthesiseMidi getSynth midi 
@@ -192,5 +213,5 @@ play inputFile = do
 
 
 
--- to play:
+-- convert to mp3 in command line:
 --ffmpeg -f f32le -ar 48000.0 -i output.bin output.mp3
