@@ -122,6 +122,15 @@ stepOneshotOsc = \dt -> do
   return output
 
 
+-- for IsVoice instance
+oneshotRestart osc = osc & _Wrapped' . storage . _Wrapped' . _3 .~ 0
+oneshotRelease (OneshotOsc (Kernel (OneshotOscStore (pulses, rate, _)) go)) = 
+                OneshotOsc $ Kernel (OneshotOscStore (pulses, rate, (fromIntegral $ length pulses) / rate)) go
+oneshotFinished  (OneshotOsc (Kernel (OneshotOscStore (pulses, rate, t)) go)) = 
+                    t > (fromIntegral $ length pulses) / rate
+oneshotInitialise _ vol (OneshotOsc (Kernel (OneshotOscStore (pulses, rate, t)) go)) = 
+                   (OneshotOsc $ Kernel (OneshotOscStore ((map (*vol) pulses), rate, t)) go)
+
 -- ============================================================
 
 
