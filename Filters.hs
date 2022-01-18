@@ -132,21 +132,38 @@ gainFilter = Kernel 1.0 go
 
 -- ================================
 
+
+-- #TODO do a better convolution (this is uselessly slow)
+-- convolution :: Vector Pulse -> Int -> Kernel (Vector Pulse) Pulse Pulse
+-- convolution kernel n = Kernel (V.fromList $ take n $ repeat 0.0) go
+--   where
+--     go pulse = do
+
+--       modify $! V.zipWith (+) (V.map (*pulse) kernel)
+--       output <- gets V.head
+--       modify $! (flip V.snoc 0.0) . V.tail
+--       return output
+
 convolution :: [Pulse] -> Int -> Kernel [Pulse] Pulse Pulse
 convolution kernel n = Kernel [] go
   where
     go pulse = do
       modify $ take n . (pulse:)
       gets $ sum . zipWith (*) kernel
+-- convolution :: [Pulse] -> Int -> Kernel [[Pulse]] Pulse Pulse
+-- convolution kernel n = Kernel [] go
+--   where
+--     go pulse = do
+--       modify $ ((map (*pulse) kernel):)
+--       output <- gets $ sum . map head
+--       modify $ filter (/= []) . map tail
+--       -- return output
+--       return output
 
 
-
-
-
-
-
-
-
+-- makeConvolution :: [Pulse] -> Kernel [Pulse] Pulse Pulse
+-- makeConvolution kernel = convolution (V.fromList kernel) (length kernel)
+makeConvolution kernel = convolution kernel (length kernel)
 
 
 

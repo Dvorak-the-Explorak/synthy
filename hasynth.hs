@@ -77,13 +77,22 @@ outputFile = "output.bin"
 -- =====================================================
 -- =====================================================
 
-main = playOnabots
+main = test
 
 
 test = do
 
   let midiFile = "c_major.mid"
-  let synth = simpleSynth sawOsc
+
+  wav <- getWAVEFile "Factory Hall/Factory Hall/Factory Hall.wav"
+  let factory = take 1000 $ samplesFromWave wav
+  putStrLn $ waveFileDescription wav
+  -- let factory = [1.0, 0.1, 0.01, 0.001, 0.0001]
+  -- let factory = take 1000 $ iterate (*0.8) 1.0
+  -- let factory = [1.0] ++ (take 10000 $ repeat 0.0) ++ [1.0]
+  let synth = AnySynth $ defaultSynth 
+                          { _synthFilt = seqKernelsWith (curry ParamSecond) (makeConvolution factory) $ lowPass (1/sampleRate) & freq .~ 44000}
+
 
   -- nope <- samplesFromWave <$> getWAVEFile "nope.wav"
   -- samples <- map samplesFromWave <$> mapM getWAVEFile ["bass_drum.wav", "snare.wav", "hi_hat.wav", "low_tom.wav", "low-mid_tom.wav"]
