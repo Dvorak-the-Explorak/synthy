@@ -83,20 +83,18 @@ main = playOnabots
 test = do
 
   let midiFile = "c_major.mid"
+  let synth = simpleSynth sawOsc
 
-  -- wav <- getWAVEFile "bass_drum.wav"
-  -- wav <- getWAVEFile "hi_hat.wav"
+  -- nope <- samplesFromWave <$> getWAVEFile "nope.wav"
+  -- samples <- map samplesFromWave <$> mapM getWAVEFile ["bass_drum.wav", "snare.wav", "hi_hat.wav", "low_tom.wav", "low-mid_tom.wav"]
+  -- let sampleMapping = Map.fromList $ zip [36, 38, 42, 45, 47] samples
 
-  nope <- samplesFromWave <$> getWAVEFile "nope.wav"
-  samples <- map samplesFromWave <$> mapM getWAVEFile ["bass_drum.wav", "snare.wav", "hi_hat.wav", "low_tom.wav", "low-mid_tom.wav"]
-  let sampleMapping = Map.fromList $ zip [36, 38, 42, 45, 47] samples
+  -- let percVoice = SampledVoice (\n -> Map.findWithDefault nope n sampleMapping) (makeOneshot nope sampleRate)
 
-  let percVoice = SampledVoice (\n -> Map.findWithDefault nope n sampleMapping) (makeOneshot nope sampleRate)
-
-  let synth = AnySynth $ defaultSynth 
-                { _synthVoices = Map.empty
-                , _synthVoiceTemplate = percVoice 
-                }
+  -- let synth = AnySynth $ defaultSynth 
+  --               { _synthVoices = Map.empty
+  --               , _synthVoiceTemplate = percVoice 
+  --               }
 
   midi <- getMidi midiFile
   let pulses = synthesiseMidi (const synth) midi
@@ -179,8 +177,10 @@ playOnabots = do
 
 
   -- Drum voice
-  nope <- samplesFromWave <$> getWAVEFile "nope.wav"
-  samples <- map samplesFromWave <$> mapM getWAVEFile ["bass_drum.wav", "snare.wav", "low_floor_tom.wav", "hi_hat.wav", "high_floor_tom.wav", "low_tom.wav", "low-mid_tom.wav", "crash.wav", "china.wav", "splash.wav"]
+  nope <- samplesFromWave <$> getWAVEFile "joe_samples/nope.wav"
+  samples <- map samplesFromWave <$> mapM getWAVEFile ["joe_samples/bass_drum.wav", "joe_samples/snare.wav", "joe_samples/low_floor_tom.wav", "joe_samples/hi_hat.wav", 
+                                                        "joe_samples/high_floor_tom.wav", "joe_samples/low_tom.wav", "joe_samples/low-mid_tom.wav", "joe_samples/crash.wav", 
+                                                        "joe_samples/china.wav", "joe_samples/splash.wav"]
   let sampleMapping = Map.fromList $ zip [36, 38, 41, 42, 43, 45, 47, 49, 52, 55] samples
 
   let drumVoice = SampledVoice (\n -> Map.findWithDefault nope n sampleMapping) (makeOneshot nope sampleRate)

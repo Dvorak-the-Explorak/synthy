@@ -18,6 +18,8 @@ import GHC.Generics
 
 import Control.Monad.State
 import Control.Lens
+import qualified Data.Vector as V
+import Data.Vector (Vector)
 
 import General (Pulse, Hz, Volume, Seconds)
 import Steppable
@@ -129,6 +131,14 @@ gainFilter = Kernel 1.0 go
       return $ pulse * gain
 
 -- ================================
+
+convolution :: [Pulse] -> Int -> Kernel [Pulse] Pulse Pulse
+convolution kernel n = Kernel [] go
+  where
+    go pulse = do
+      modify $ take n . (pulse:)
+      gets $ sum . zipWith (*) kernel
+
 
 
 
