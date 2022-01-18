@@ -117,9 +117,6 @@ stepOneshotOsc = \dt -> do
   let output = if index >= V.length pulses 
                 then 0.0
                 else pulses ! index
-  -- let output = case pulses !? index of
-  --           Nothing -> 0.0
-  --           Just x -> x  
   put $ OneshotOscStore (pulses, rate, t')
   return output
 

@@ -50,13 +50,12 @@ import Debug.Trace
 --    TempoChange and TimeDiv to get the speed of songs right
 --    ProgramChange to get different instruments?
 --    Velocity in NoteOn and NoteOff
--- #TODO percussion sounds - from noise oscillators
+-- #TODO percussion sounds from noise oscillators
 -- #TODO voices with samples - load up a general midi soundfont and use that
 -- #TODO more filters:
 --    Reverb
 --    lowPass with resonance
 --    highPass with resonance
---    bandPass
 --    phaser
 -- #TODO filter from laplace transform or something
 
@@ -210,8 +209,6 @@ play inputFile = do
   midi <- getMidi inputFile
   let pulses = synthesiseMidi (const $ AnySynth defaultSynth) midi
   saveAndPlaySound pulses
-
-
 
 -- convert to mp3 in command line:
 --ffmpeg -f f32le -ar 48000.0 -i output.bin output.mp3

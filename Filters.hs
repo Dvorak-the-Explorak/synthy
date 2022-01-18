@@ -81,6 +81,8 @@ centeredBandPass dt = seqKernelsWith CBPStore (lowPass dt) (highPass dt)
 
 
 
+
+
 lowPass :: Seconds -> Kernel (WithStorage Pulse FreqParam) Pulse Pulse
 lowPass dt = Kernel s go
   where
@@ -127,6 +129,19 @@ gainFilter = Kernel 1.0 go
       return $ pulse * gain
 
 -- ================================
+
+
+
+
+
+
+
+
+
+
+
+
+-- ====================================================
 
 rcFromCutoff :: Hz -> Float
 rcFromCutoff f = 1/(2*pi*f)

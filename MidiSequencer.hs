@@ -142,10 +142,6 @@ notImplemented :: Monad m => Message -> m ()
 notImplemented x = trace ("Unhandled Midi: " ++ show x) $ return ()
 
 
-
-
-
-
 -- First message of any channel must be ProgramChange
 synthesiseMidiTrack :: PatchLookup -> Track Ticks -> State TrackState [Pulse]
 -- when there are no more messages, let all the sounds finish
@@ -171,47 +167,20 @@ synthesiseMidiTrack getPatch ((ticks, message):messages) = do
   (output++) <$> synthesiseMidiTrack getPatch messages
 
 
--- synthesiseMidiTrack :: (Source s, FreqField s, IsVoice s) =>  Track Ticks -> State (Synth s f) [Pulse]
--- -- when there are no more messages, let all the sounds finish
--- synthesiseMidiTrack [] = runSynthANiente (1/sampleRate)
--- synthesiseMidiTrack ((ticks, TrackEnd):_) = runSynthSteps ticks (1/sampleRate) -- don't run aNiente
--- synthesiseMidiTrack ((ticks, message):messages) = do
---   -- `ticks` says how many steps since the previous message, so run the synth that long
---   output <- runSynthSteps ticks (1/sampleRate)
 
---   -- handle the effect of the message
---   case message of
---     NoteOff ch key vel -> noteOffSynth key 
---     -- NoteOn with 0 velocity counts as noteOff
---     NoteOn ch key 0 -> noteOffSynth key 
---     NoteOn ch key vel -> noteOnSynth key $ (fromIntegral vel) / 127.0
---     TrackName str -> return ()  
---     Copyright str -> return ()  
---     Lyrics str -> return ()   
---     x -> notImplemented x 
-
---     -- KeyPressure ch key pressure -> return ()
---     -- ControlChange ch contNum contVal -> return ()
---     -- ProgramChange ch preset -> return ()
---     -- ChannelPressure ch pressure -> return ()
---     -- PitchWheel ch pitch -> return ()
---     -- SequenceNumber n -> return ()
---     -- Text str -> return ()   
---     -- InstrumentName str -> return ()   
---     -- Marker str -> return ()   
---     -- CuePoint str -> return ()   
---     -- ChannelPrefix ch -> return ()   
---     -- ProgramName str -> return ()  
---     -- DeviceName str -> return ()   
---     -- TempoChange tempo -> return ()
---     -- SMPTEOffset !Int !Int !Int !Int !Int   
---     -- TimeSignature !Int !Int !Int !Int  
---     -- KeySignature !Int !Int   
---     -- _ -> return ()
-
---   -- do the rest of the messages
---   (output++) <$> synthesiseMidiTrack messages
-
---   -- remainder <- synthesiseMidiTrack messages
---   -- return $ output ++ remainder
-
+-- TempoChange tempo -> return ()
+-- KeyPressure ch key pressure -> return ()
+-- ControlChange ch contNum contVal -> return ()
+-- ChannelPressure ch pressure -> return ()
+-- PitchWheel ch pitch -> return ()
+-- SequenceNumber n -> return ()
+-- Text str -> return ()   
+-- InstrumentName str -> return ()   
+-- Marker str -> return ()   
+-- CuePoint str -> return ()   
+-- ChannelPrefix ch -> return ()   
+-- ProgramName str -> return ()  
+-- DeviceName str -> return ()   
+-- SMPTEOffset !Int !Int !Int !Int !Int   
+-- TimeSignature !Int !Int !Int !Int  
+-- KeySignature !Int !Int   

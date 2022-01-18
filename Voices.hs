@@ -180,15 +180,6 @@ instance Steppable Seconds Pulse SampledVoice where
 
 
 instance IsVoice OneshotOsc where
-  -- -- restart (OneshotOsc (Kernel (OneshotOscStore (pulses, rate, _)) go)) = 
-  -- --          OneshotOsc $ Kernel (OneshotOscStore (pulses, rate, 0)) go
-  -- restart osc = osc & _Wrapped' . storage . _Wrapped' . _3 .~ 0
-  -- release (OneshotOsc (Kernel (OneshotOscStore (pulses, rate, _)) go)) = 
-  --          OneshotOsc $ Kernel (OneshotOscStore (pulses, rate, (fromIntegral $ length pulses) / rate)) go
-  -- finished = oneshotDone
-  -- initialise _ vol (OneshotOsc (Kernel (OneshotOscStore (pulses, rate, t)) go)) = 
-  --                  (OneshotOsc $ Kernel (OneshotOscStore ((map (*vol) pulses), rate, t)) go)
-
   restart = oneshotRestart
   release = oneshotRelease 
   finished = oneshotFinished 
