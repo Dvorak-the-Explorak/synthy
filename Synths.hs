@@ -145,10 +145,10 @@ instance IsSynth AnySynth where
     in (output, AnySynth synth')
 
 
-  -- _runSynthSteps n dt = state $ \(AnySynth synth) -> let
-  --     (output, synth') = runState (runSynthSteps n dt) synth
-  --   in (output, AnySynth synth')
-  _runSynthSteps n dt = stepChunk $ take n $ repeat dt
+  _runSynthSteps n dt = state $ \(AnySynth synth) -> let
+      (output, synth') = runState (runSynthSteps n dt) synth
+    in (output, AnySynth synth')
+  -- _runSynthSteps n dt = stepChunk $ take n $ repeat dt
 
   _runSynth dt = state $ \(AnySynth synth) -> let
       (output, synth') = runState (runSynth dt) synth
@@ -214,8 +214,16 @@ noteOffAllSynth = voices.each %= release
 
 -- ==============================================================================
 
-simpleSynth :: SimpleOsc -> AnySynth
-simpleSynth osc = AnySynth $ defaultSynth & voiceTemplate.source .~ osc
+-- simpleSynth :: SimpleOsc -> AnySynth
+-- simpleSynth osc = AnySynth $ defaultSynth & voiceTemplate.source .~ osc
+
+-- simpleSynth :: (Source s) => s -> AnySynth
+simpleSynth osc = AnySynth $ defaultSynth
+                              { _synthVoices = Map.empty
+                              , _synthVoiceTemplate = defaultVoice 
+                                { _voiceSource = osc 
+                                }
+                              }
 
 
 defaultSynth = Synth {

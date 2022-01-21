@@ -7,6 +7,7 @@
            , BangPatterns
            , ExistentialQuantification
            , DeriveGeneric
+           , ScopedTypeVariables
   #-}
 
 module Oscillators where
@@ -134,7 +135,7 @@ oneshotInitialise _ vol (OneshotOsc (Kernel (OneshotOscStore (pulses, rate, t)) 
 
 
 pureTone :: Waveform
-pureTone = (sin . (*) (2*pi))
+pureTone = (sin . (*(2*pi)))
 
 sawTone :: Waveform
 -- sawTone = (flip (-) 1) . (*2) . (flip mod' 1.0)
@@ -224,4 +225,12 @@ noisy g noiseMix (Kernel _storage _doStep) = (Kernel _storage' _doStep')
       noise <- stepRandomOsc dt .@ _2
       return ((1-noiseMix)*output + noiseMix*noise)
 
+-- use the first to modulate the second
+fm :: FreqField s2 => Kernel s1 Seconds Float -> Kernel s2 Seconds Pulse -> Kernel (ParamSecond s1 s2)Seconds Pulse
+fm (Kernel s1 go1) (Kernel s2 go2) = Kernel (ParamSecond (s1,s2)) $ \dt -> do
+  moduland <- go1 dt .@ _1
+  _2.freq += moduland
+  output <- go2 dt .@ _2
+  _2.freq -= moduland
 
+  return output

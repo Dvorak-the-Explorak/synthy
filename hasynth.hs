@@ -83,12 +83,14 @@ test = do
   -- let factoryVerb = [1.0, 0.1, 0.01, 0.001, 0.0001]
   -- let factoryVerb = take 50 $ iterate (*0.95) 1.0
   -- let factoryVerb = [1.0] ++ (take 10000 $ repeat 0.0) ++ [1.0]
-  let synth = AnySynth $ defaultSynth 
-                          { _synthFilt = seqKernelsWith (curry ParamSecond) (delayFilter 4000 0.7) $ lowPass (1/sampleRate) & freq .~ 44000}
+  -- let synth = AnySynth $ defaultSynth 
+  --                         { _synthFilt = seqKernelsWith (curry ParamSecond) (delayFilter 4000 0.7) $ lowPass (1/sampleRate) & freq .~ 44000}
   -- let synth = AnySynth $ defaultSynth 
   --                         { _synthFilt = makeConvolution factoryVerb}
 
-  -- let synth = AnySynth $ defaultSynth
+  let vibrato = simpleOsc ((*25) . pureTone) & freq .~ 150
+
+  let synth = simpleSynth $ fm vibrato sawOsc
 
 
   -- nope <- samplesFromWave <$> getWAVEFile "nope.wav"
