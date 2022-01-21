@@ -86,14 +86,14 @@ centeredBandPass dt = seqKernelsWith CBPStore (lowPass dt) (highPass dt)
 
 
 
-lowPass :: Seconds -> Kernel (WithStorage Pulse FreqParam) Pulse Pulse
+lowPass :: Seconds -> Filter (WithStorage Pulse FreqParam)
 lowPass dt = Kernel s go
   where
     s = WithStorage 0 (FreqParam 0)
     go = lowPassFunc dt
 
 
-highPass :: Seconds -> Kernel (WithStorage (Pulse,Pulse) FreqParam) Pulse Pulse
+highPass :: Seconds -> Filter (WithStorage (Pulse,Pulse) FreqParam)
 highPass dt = Kernel s go
   where
     s = WithStorage (0,0) $ FreqParam 0
@@ -107,24 +107,24 @@ combFilter = Kernel s go
     s = CombStore ([], 0.8, 10)
     go = combFilterFunc
 
-clipper :: Kernel Volume Pulse Pulse
+clipper :: Filter Volume
 clipper = Kernel 1.0 go
   where
     go pulse = do
       limit <- get
       return $ (/limit) $ hardClipLimit limit pulse
 
-pureFilter :: (Pulse -> Pulse) -> Kernel () Pulse Pulse
+pureFilter :: (Pulse -> Pulse) -> Filter () 
 pureFilter f = Kernel () (return . f)
 
-cubicFilter :: Kernel Float Pulse Pulse
+cubicFilter :: Filter Float 
 cubicFilter = Kernel 1.0 go
   where
     go pulse = do
       strength <- get
       return $ strength*pulse**3 + (1-strength)*pulse
 
-gainFilter :: Kernel Float Pulse Pulse
+gainFilter :: Filter Float 
 gainFilter = Kernel 1.0 go
   where
     go pulse = do
@@ -195,7 +195,7 @@ gainFilter = Kernel 1.0 go
 --       output <- gets V.head
 --       modify $! (flip V.snoc 0.0) . V.tail
 --       return output
-convolution :: [Pulse] -> Int -> Kernel [Pulse] Pulse Pulse
+convolution :: [Pulse] -> Int -> Filter [Pulse]
 convolution kernel n = Kernel [] go
   where
     go pulse = do
