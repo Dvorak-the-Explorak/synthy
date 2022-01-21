@@ -57,16 +57,9 @@ import Debug.Trace
 --    lowPass with resonance
 --    highPass with resonance
 --    phaser
--- #TODO filter from laplace transform or something
-
+-- #TODO filter from transfer functions / fft  or something
 
 -- #TODO live stream mode, plug a midi controller
-
--- ================================================================
-
-
-x_squared :: [Float]
-x_squared = map ((\x -> x*x) . (/256)) [0..256]
 
 -- ================================================================
 
@@ -79,19 +72,23 @@ outputFile = "output.bin"
 
 main = test
 
-
 test = do
 
   let midiFile = "c_major.mid"
 
-  wav <- getWAVEFile "Factory Hall/Factory Hall/Factory Hall.wav"
-  let factory = take 1000 $ samplesFromWave wav
-  putStrLn $ waveFileDescription wav
-  -- let factory = [1.0, 0.1, 0.01, 0.001, 0.0001]
-  -- let factory = take 1000 $ iterate (*0.8) 1.0
-  -- let factory = [1.0] ++ (take 10000 $ repeat 0.0) ++ [1.0]
-  let synth = AnySynth $ defaultSynth 
-                          { _synthFilt = seqKernelsWith (curry ParamSecond) (makeConvolution factory) $ lowPass (1/sampleRate) & freq .~ 44000}
+  -- wav <- getWAVEFile "Factory Hall/Factory Hall/Factory Hall.wav"
+
+  -- let factoryVerb = take 1000 $ samplesFromWave wav
+  -- putStrLn $ waveFileDescription wav
+  -- let factoryVerb = [1.0, 0.1, 0.01, 0.001, 0.0001]
+  -- let factoryVerb = take 50 $ iterate (*0.95) 1.0
+  -- let factoryVerb = [1.0] ++ (take 10000 $ repeat 0.0) ++ [1.0]
+  -- let synth = AnySynth $ defaultSynth 
+  --                         { _synthFilt = seqKernelsWith (curry ParamSecond) (makeConvolution factoryVerb) $ lowPass (1/sampleRate) & freq .~ 44000}
+  -- let synth = AnySynth $ defaultSynth 
+  --                         { _synthFilt = makeConvolution factoryVerb}
+
+  let synth = AnySynth $ defaultSynth
 
 
   -- nope <- samplesFromWave <$> getWAVEFile "nope.wav"

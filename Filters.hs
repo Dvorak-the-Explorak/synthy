@@ -20,13 +20,14 @@ import Control.Monad.State
 import Control.Lens
 import qualified Data.Vector as V
 import Data.Vector (Vector)
+import Data.Vector.Mutable (write)
 
 import General (Pulse, Hz, Volume, Seconds)
 import Steppable
 import Helpers
 import Parameterised
 
-
+type Filter a = Kernel a Pulse Pulse
 
 (~>) :: Kernel s1 Pulse Pulse -> Kernel s2 Pulse Pulse -> Kernel (s1, s2) Pulse Pulse
 (~>) = seqKernels
@@ -130,7 +131,58 @@ gainFilter = Kernel 1.0 go
       gain <- get
       return $ pulse * gain
 
+
 -- ================================
+
+
+
+-- -- Ring buffer style thing
+-- newtype ConvFilter = ConvFilter (Kernel ConvHistory Pulse Pulse)
+--   deriving Generic
+-- instance Wrapped ConvFilter
+
+-- instance Steppable Pulse Pulse ConvFilter where
+--   step pulse = step pulse .@ _Wrapped'
+--   -- stepChunk pulses = 
+
+-- -- #TODO remove this, it's a lie
+-- instance FreqField ConvFilter where
+--   freq = lens get set
+--     where
+--       -- get _ = 0.0
+--       get = const 0.0
+--       -- set x _ = x
+--       set = const
+
+-- data ConvHistory = ConvHistory 
+--   { vals :: Vector Pulse
+--   , headIndex :: Int
+--   }
+
+-- roll :: Pulse -> ConvHistory -> ConvHistory
+-- roll next (ConvHistory pulses n) = ConvHistory pulses' n'
+--   where
+--     n' = (n-1 + V.length pulses) `mod` V.length pulses
+--     pulses' = V.modify (\v -> write v n' next) pulses
+-- getDot :: [Pulse] -> ConvHistory -> Pulse
+-- getDot kernel (ConvHistory pulses n) = result
+--   where
+--     (histEnd, histStart) = V.splitAt n pulses
+--     result = sum $ zipWith (*) kernel $ V.toList histStart ++ V.toList histEnd
+
+
+-- convolution :: [Pulse] -> Int -> ConvFilter
+-- convolution kernel n = ConvFilter $ Kernel (ConvHistory (V.replicate n 0.0) 0) go
+--   where
+--     go pulse = do
+--       modify $ roll pulse 
+--       -- dot product of kernel with history
+--       gets $ getDot kernel
+
+-- ===========================================
+
+
+
 
 
 -- #TODO do a better convolution (this is uselessly slow)
@@ -143,13 +195,13 @@ gainFilter = Kernel 1.0 go
 --       output <- gets V.head
 --       modify $! (flip V.snoc 0.0) . V.tail
 --       return output
-
 convolution :: [Pulse] -> Int -> Kernel [Pulse] Pulse Pulse
 convolution kernel n = Kernel [] go
   where
     go pulse = do
       modify $ take n . (pulse:)
       gets $ sum . zipWith (*) kernel
+
 -- convolution :: [Pulse] -> Int -> Kernel [[Pulse]] Pulse Pulse
 -- convolution kernel n = Kernel [] go
 --   where

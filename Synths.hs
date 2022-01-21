@@ -74,6 +74,8 @@ instance Steppable Seconds Pulse AnySynth where
     in (output, AnySynth synth')
 
 
+
+-- #TODO put the LFO into the stepChunk
 -- Source == Steppable Seconds Pulse
 instance (Source v, IsVoice v, Transformer f, FreqField f) => Steppable Seconds Pulse (Synth v f) where
   step dt  = do
@@ -106,6 +108,31 @@ instance (Source v, IsVoice v, Transformer f, FreqField f) => Steppable Seconds 
     -- give some headroom 
     return $ 0.1*output
 
+-- -- #TODO incorporate the LFO somehow
+--   stepChunk dts = do
+--     -- modulands <- stepChunk dts .@ lfo
+--     -- strength <- use lfoStrength
+
+--     pulseChunks <- stateMap (stepChunk dts) .@ voices
+--     let pulseChunk = Map.foldl' (zipWith (+)) (repeat 0) pulseChunks
+
+--     voices %= Map.filter (not . finished)
+
+--     (map (0.1*)) <$> stepChunk pulseChunk .@ filt
+
+
+
+
+
+
+modulated :: (Transformer f, FreqField f) => Hz -> State f Pulse -> State f Pulse
+modulated change action = do
+  freq += change
+  result <- action
+  freq -= change
+  return result
+
+
 -- ===================================================================================
 
 
@@ -118,9 +145,10 @@ instance IsSynth AnySynth where
     in (output, AnySynth synth')
 
 
-  _runSynthSteps n dt = state $ \(AnySynth synth) -> let
-      (output, synth') = runState (runSynthSteps n dt) synth
-    in (output, AnySynth synth')
+  -- _runSynthSteps n dt = state $ \(AnySynth synth) -> let
+  --     (output, synth') = runState (runSynthSteps n dt) synth
+  --   in (output, AnySynth synth')
+  _runSynthSteps n dt = stepChunk $ take n $ repeat dt
 
   _runSynth dt = state $ \(AnySynth synth) -> let
       (output, synth') = runState (runSynth dt) synth
