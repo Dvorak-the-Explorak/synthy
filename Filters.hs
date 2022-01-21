@@ -19,7 +19,7 @@ import GHC.Generics
 import Control.Monad.State
 import Control.Lens
 import qualified Data.Vector as V
-import Data.Vector (Vector)
+import Data.Vector (Vector, (!))
 import Data.Vector.Mutable (write)
 
 import General (Pulse, Hz, Volume, Seconds)
@@ -130,6 +130,45 @@ gainFilter = Kernel 1.0 go
     go pulse = do
       gain <- get
       return $ pulse * gain
+
+
+-- ===============================================
+
+data RingBuffer a = RingBuffer 
+  { vals :: Vector a
+  , headIndex :: Int
+  }
+getBuffer :: RingBuffer a -> a
+getBuffer (RingBuffer vals n) = vals ! n
+
+pushBuffer :: a -> RingBuffer a -> RingBuffer a
+pushBuffer x (RingBuffer vals n) = (RingBuffer vals' n')
+  where
+    -- overwrite current with given value
+    vals' = V.modify (\v -> write v n x) vals
+    -- move to next value
+    n' = (n+1) `mod` V.length vals
+
+
+singleDelayFilter :: Int -> Volume -> Filter (RingBuffer Pulse)
+singleDelayFilter delaySamples gain = Kernel buff go
+  where
+    buff = RingBuffer (V.fromList $ take delaySamples $ repeat 0.0) 0
+    go pulse = do
+      output <- (pulse+) <$> (gain*) <$> gets getBuffer
+      modify $ pushBuffer pulse
+      return output
+
+delayFilter :: Int -> Volume -> Filter (RingBuffer Pulse)
+delayFilter delaySamples gain = Kernel buff go
+  where
+    buff = RingBuffer (V.fromList $ take delaySamples $ repeat 0.0) 0
+    go pulse = do
+      output <- (pulse+) <$> (gain*) <$> gets getBuffer
+      modify $ pushBuffer output
+
+      return output
+
 
 
 -- ================================

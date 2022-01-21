@@ -37,10 +37,11 @@ import Debug.Trace
 {-   WANT:
 To be able to easily add filters / modulators to a voice
 
+for `IsVoice v` to imply `Source v`
+
 -}
 
-
--- #TODO want `IsVoice v` to imply `Source v`
+-- #TODO update finished to wait for filter to finish too
 class IsVoice v where
   restart :: v -> v
   release :: v -> v

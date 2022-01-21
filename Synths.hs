@@ -173,6 +173,7 @@ instance IsSynth AnySynth where
 
 
 -- Kill any remaining notes, wait for them to ring out
+-- #TODO wait for ringing in the filters to finish, not just the voices
 runSynthANiente :: (Source v, IsVoice v, Transformer f, FreqField f) => Seconds -> State (Synth v f) [Pulse]
 runSynthANiente dt = do
   noteOffAllSynth
