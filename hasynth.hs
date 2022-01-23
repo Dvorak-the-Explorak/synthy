@@ -47,11 +47,9 @@ import Debug.Trace
 
 
 -- #TODO interpret more midi messages:
---    TempoChange and TimeDiv to get the speed of songs right
---    ProgramChange to get different instruments?
---    Velocity in NoteOn and NoteOff
+--    TempoChange to get the speed of songs right
 -- #TODO percussion sounds from noise oscillators
--- #TODO voices with samples - load up a general midi soundfont and use that
+-- #TODO General Midi Soundfonts as voices / instruments
 -- #TODO more filters:
 --    Reverb
 --    lowPass with resonance
@@ -67,8 +65,8 @@ outputFile :: FilePath
 outputFile = "output.bin"
 
 
--- =====================================================
--- =====================================================
+-- ================================================================
+-- ================================================================
 
 main = test
 
